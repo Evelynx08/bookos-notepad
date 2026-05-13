@@ -1,0 +1,58 @@
+# Rust / Cargo
+/src-tauri/target/
+/src-tauri/Cargo.lock.bak
+**/*.rs.bk
+
+# Tauri generated
+/src-tauri/gen/
+/src-tauri/WixTools/
+
+# Node (si añades dev tooling)
+node_modules/
+dist/
+build/
+.npm/
+.yarn/
+yarn-error.log*
+npm-debug.log*
+pnpm-debug.log*
+
+# Estado app / configs locales
+*.log
+.env
+.env.local
+.env.*.local
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.fleet/
+
+# macOS / Linux / Windows basura
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.bak
+*.tmp
+
+# Bundles generados
+/src-tauri/target/release/bundle/
+*.deb
+*.rpm
+*.AppImage
+*.pkg.tar.zst
+*.pkg.tar.xz
+
+# Imágenes/archivos pesados accidentales (deja fuera por defecto, fuerza con git add -f si hace falta)
+*.iso
+*.qcow2
+*.img
+core
+core.*

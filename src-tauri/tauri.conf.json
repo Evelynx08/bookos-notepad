@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "identifier": "com.bookos.notepad",
+  "productName": "Bookos Notepad",
+  "mainBinaryName": "bookos-notepad",
+  "version": "0.1.0",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; frame-src 'self' data: blob: https: http: about:; child-src 'self' data: blob: https: http:; media-src 'self' data: blob: https: http:; script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    },
+    "windows": [
+      {
+        "title": "Bloc de notas",
+        "width": 900,
+        "height": 640,
+        "minWidth": 560,
+        "minHeight": 400,
+        "decorations": false,
+        "transparent": true,
+        "resizable": true,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["icons/icon.png"],
+    "targets": ["deb", "rpm"],
+    "publisher": "BookOS",
+    "category": "Utility",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "gtk3"]
+      }
+    }
+  }
+}

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0,user-scalable=no">
+<link rel="stylesheet" href="style.css">
+<title>Bloc de notas</title>
+</head>
+<body>
+<div class="main-container windowed" id="mc">
+  <div class="titlebar" data-tauri-drag-region>
+    <div class="tb-left" data-tauri-drag-region>
+      <span class="tb-title" id="tb-title">Bloc de notas</span>
+    </div>
+    <div class="tb-center" id="tabs-row" data-tauri-drag-region></div>
+    <div class="tb-right">
+      <button id="new-btn" class="tb-icon-btn" title="Nueva pestaña (Ctrl+T)" aria-label="Nueva pestaña">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button id="open-btn" class="tb-icon-btn" title="Abrir (Ctrl+O)" aria-label="Abrir">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </button>
+      <button id="save-btn" class="tb-icon-btn" title="Guardar (Ctrl+S)" aria-label="Guardar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+      </button>
+      <button id="preview-btn" class="tb-icon-btn" title="Previsualizar (Ctrl+P)" aria-label="Previsualizar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button id="fullscreen-btn" class="tb-icon-btn" title="Pantalla completa (F11)" aria-label="Pantalla completa">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      </button>
+      <button id="settings-btn" class="tb-icon-btn" title="Ajustes" aria-label="Ajustes">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button id="theme-btn" class="tb-icon-btn" title="Tema" aria-label="Cambiar tema">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <div class="controls">
+        <button id="minimize" title="Minimizar">─</button>
+        <button id="maximize" title="Maximizar">☐</button>
+        <button id="close" title="Cerrar">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar" id="toolbar">
+    <button class="tool-btn" data-cmd="bold" title="Negrita (Ctrl+B)" aria-label="Negrita"><b>B</b></button>
+    <button class="tool-btn" data-cmd="italic" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><i>I</i></button>
+    <button class="tool-btn" data-cmd="underline" title="Subrayado (Ctrl+U)" aria-label="Subrayado"><u>U</u></button>
+    <button class="tool-btn" data-cmd="strikeThrough" title="Tachado" aria-label="Tachado"><s>S</s></button>
+    <span class="tool-sep"></span>
+    <button class="tool-btn" data-cmd="insertUnorderedList" title="Lista" aria-label="Lista">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="6" r="1.5" fill="currentColor"/><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="5" cy="18" r="1.5" fill="currentColor"/><path d="M10 6h11M10 12h11M10 18h11"/></svg>
+    </button>
+    <button class="tool-btn" data-cmd="insertOrderedList" title="Lista numerada" aria-label="Lista numerada">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 6h11M10 12h11M10 18h11M4 6h1v0M4 4v4M4 10h2l-2 2h2M4 16h2v1h-2v1h2"/></svg>
+    </button>
+    <span class="tool-sep"></span>
+    <button class="tool-btn" data-cmd="justifyLeft" title="Izquierda" aria-label="Izquierda">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h12M3 18h18"/></svg>
+    </button>
+    <button class="tool-btn" data-cmd="justifyCenter" title="Centro" aria-label="Centro">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M6 12h12M3 18h18"/></svg>
+    </button>
+    <button class="tool-btn" data-cmd="justifyRight" title="Derecha" aria-label="Derecha">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M9 12h12M3 18h18"/></svg>
+    </button>
+    <span class="tool-sep"></span>
+    <label class="color-wrap" title="Color de texto">
+      <span class="color-letter">A</span>
+      <input type="color" id="color-text" value="#000000">
+    </label>
+    <label class="color-wrap" title="Color de fondo">
+      <span class="color-letter color-letter-bg">H</span>
+      <input type="color" id="color-bg" value="#ffff00">
+    </label>
+    <span class="tool-sep"></span>
+    <button class="tool-btn" id="zoom-out" title="Reducir (Ctrl+-)" aria-label="Reducir">A−</button>
+    <span class="zoom-val" id="zoom-val">100%</span>
+    <button class="tool-btn" id="zoom-in" title="Aumentar (Ctrl++)" aria-label="Aumentar">A+</button>
+    <span class="tool-sep"></span>
+    <button class="tool-btn" data-cmd="removeFormat" title="Limpiar formato" aria-label="Limpiar formato">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M5 20h6"/><path d="M13 4L8 20"/><path d="M15 15l5 5M20 15l-5 5"/></svg>
+    </button>
+  </div>
+
+  <div class="page-wrap" id="page-wrap">
+    <div class="page page-editor" id="page-editor">
+      <div class="split" id="split">
+        <div class="editor-wrap split-pane" id="editor-pane">
+          <div class="editor-host" id="editor-host"></div>
+        </div>
+        <div class="splitter" id="splitter" title="Arrastra para redimensionar"></div>
+        <div class="preview-pane split-pane hidden" id="preview-pane">
+          <div class="preview-bar">
+            <div class="preview-mode-pills" id="preview-mode-pills">
+              <button class="pill" data-pmode="auto" title="Automático según extensión">Auto</button>
+              <button class="pill" data-pmode="html" title="Render HTML del editor">HTML</button>
+              <button class="pill" data-pmode="md" title="Render Markdown del editor">MD</button>
+              <button class="pill" data-pmode="url" title="Cargar URL externa">URL</button>
+            </div>
+            <input type="text" class="url-input" id="url-input" placeholder="https://… · youtube.com/watch?v=… · localhost:3000" spellcheck="false">
+            <button class="tool-btn" id="url-go" title="Cargar (Enter)" aria-label="Cargar">↵</button>
+            <button class="tool-btn" id="preview-refresh" title="Recargar" aria-label="Recargar">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+            </button>
+            <button class="tool-btn shield-badge on" id="shield-badge" title="Adblock activo">🛡</button>
+            <button class="tool-btn" id="preview-close" title="Cerrar preview" aria-label="Cerrar preview">×</button>
+          </div>
+          <div class="preview-body" id="preview-body"></div>
+        </div>
+      </div>
+      <div class="statusbar" id="statusbar">
+        <span class="status-left" id="status-path">Sin título</span>
+        <span class="status-right">
+          <span id="status-lang">Texto</span>
+          <span class="status-dot">·</span>
+          <span id="status-chars">0 caracteres</span>
+          <span class="status-dot">·</span>
+          <span id="status-lines">1 línea</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="page page-settings hidden" id="page-settings">
+      <div class="settings-frame">
+        <h2 class="page-title">Ajustes</h2>
+
+        <div class="section-header">Apariencia</div>
+        <div class="detail-card">
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">Tema</div><div class="ds">Sigue al sistema cuando es Automático</div></div>
+            <div class="seg" id="seg-theme" data-key="theme">
+              <button data-v="auto">Auto</button><button data-v="light">Claro</button><button data-v="dark">Oscuro</button>
+            </div>
+          </div>
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">Fuente</div><div class="ds">Familia del editor</div></div>
+            <div class="seg" id="seg-font" data-key="font">
+              <button data-v="sans">Sans</button><button data-v="serif">Serif</button><button data-v="mono">Mono</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-header">Editor</div>
+        <div class="detail-card">
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">Ajuste de línea</div><div class="ds">Envolver texto al borde</div></div>
+            <div class="toggle-switch" id="tg-wrap" role="switch" tabindex="0" aria-label="Ajuste de línea"></div>
+          </div>
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">Mostrar barra de estado</div><div class="ds">Cuenta de caracteres y líneas</div></div>
+            <div class="toggle-switch" id="tg-status" role="switch" tabindex="0" aria-label="Barra de estado"></div>
+          </div>
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">Resaltar archivos por color</div><div class="ds">Fondo distinto según extensión</div></div>
+            <div class="toggle-switch" id="tg-fileaccent" role="switch" tabindex="0" aria-label="Resaltar"></div>
+          </div>
+        </div>
+
+        <div class="section-header">Previsualización · Adblock</div>
+        <div class="detail-card">
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">Bloqueador de anuncios</div><div class="ds">Motor adblock-rust de Brave · EasyList + EasyPrivacy</div></div>
+            <div class="toggle-switch" id="tg-adblock" role="switch" tabindex="0" aria-label="Adblock"></div>
+          </div>
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">YouTube sin cookies</div><div class="ds">Usa youtube-nocookie.com + sin anotaciones</div></div>
+            <div class="toggle-switch" id="tg-yt-nocookie" role="switch" tabindex="0" aria-label="YouTube no-cookie"></div>
+          </div>
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">YouTube directo (sin /embed/)</div><div class="ds">Para videos que prohíben embeber. Suele fallar por X-Frame-Options. Inténtalo si el embed dice "no disponible".</div></div>
+            <div class="toggle-switch" id="tg-yt-direct" role="switch" tabindex="0" aria-label="YouTube directo"></div>
+          </div>
+          <div class="detail-item">
+            <div class="dt">Listas adicionales</div>
+            <div class="ds">Pon ficheros <code>.txt</code> con reglas EasyList en <code>~/.config/bookos-notepad/filters/</code> y reinicia.</div>
+          </div>
+        </div>
+
+        <div class="section-header">Atajos</div>
+        <div class="detail-card">
+          <div class="detail-item"><div class="dt">Ctrl+N</div><div class="ds">Nueva pestaña</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+T</div><div class="ds">Nueva pestaña</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+W</div><div class="ds">Cerrar pestaña</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+O</div><div class="ds">Abrir archivo</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+S</div><div class="ds">Guardar</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+Shift+S</div><div class="ds">Guardar como</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+Tab</div><div class="ds">Pestaña anterior usada</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+Shift+Tab</div><div class="ds">Pestaña previa</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+B / I / U</div><div class="ds">Negrita / Cursiva / Subrayado</div></div>
+          <div class="detail-item"><div class="dt">Ctrl + / Ctrl -</div><div class="ds">Aumentar / Reducir texto</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+0</div><div class="ds">Tamaño 100%</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+P</div><div class="ds">Mostrar/ocultar previsualización</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+Z / Ctrl+Y</div><div class="ds">Deshacer / Rehacer</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+Shift+Z</div><div class="ds">Rehacer (alternativo)</div></div>
+          <div class="detail-item"><div class="dt">Ctrl+A</div><div class="ds">Seleccionar todo</div></div>
+          <div class="detail-item"><div class="dt">F11</div><div class="ds">Pantalla completa (Escape para salir)</div></div>
+        </div>
+
+        <div class="section-header">Acerca de</div>
+        <div class="detail-card">
+          <div class="detail-item detail-item-row">
+            <div class="detail-texts"><div class="dt">Bookos Notepad</div><div class="ds">Versión 0.1.0 · BookOS</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="vendor/marked.min.js"></script>
+<script src="main.js" type="module"></script>
+</body>
+</html>
