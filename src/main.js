@@ -33,7 +33,8 @@ const DEFAULT_SETTINGS = {
   previewUrl: '',
   adblockEnabled: true,
   youtubeNoCookie: true,
-  youtubeDirect: false      // try youtube.com/watch directly (skip /embed/)
+  youtubeDirect: false,     // try youtube.com/watch directly (skip /embed/)
+  shortcuts: {}             // user overrides: { actionId: "Ctrl+Alt+B" }
 };
 
 let state = { theme:'auto', settings:{...DEFAULT_SETTINGS} };
@@ -169,6 +170,8 @@ function closeTab(id) {
 function renderTabs() {
   const row = $('#tabs-row');
   row.innerHTML = '';
+  // #5 hide tabs row when only 1 tab
+  row.classList.toggle('single-tab', tabs.length < 2);
   for (const t of tabs) {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === activeId ? ' active' : '') + (t.dirty ? ' dirty' : '');
@@ -307,6 +310,9 @@ function youtubeEmbed(url) {
 function normalizeUrl(raw) {
   raw = (raw || '').trim();
   if (!raw) return '';
+  // Common typos: ttps:// → https://, ttp:// → http://
+  if (/^ttps:\/\//i.test(raw)) raw = 'h' + raw;
+  else if (/^ttp:\/\//i.test(raw)) raw = 'h' + raw;
   if (/^https?:\/\//i.test(raw)) return raw;
   if (/^localhost(:\d+)?($|\/)/i.test(raw)) return 'http://' + raw;
   if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?($|\/)/.test(raw)) return 'http://' + raw;
@@ -390,6 +396,8 @@ function renderPreview() {
 }
 
 function mountUrlIframe(body, final) {
+  const isYt = /youtube(-nocookie)?\.com\/embed\//.test(final) || /youtube\.com\/watch/.test(final) || /youtu\.be/.test(final);
+  body.classList.toggle('yt-fit', isYt);
   const f = document.createElement('iframe');
   f.src = final;
   f.referrerPolicy = 'strict-origin-when-cross-origin';
@@ -397,6 +405,64 @@ function mountUrlIframe(body, final) {
   f.setAttribute('allowfullscreen', '');
   body.appendChild(f);
   updateShieldBadge(true, final);
+  // For YouTube embeds, add a floating action bar with PiP/external player options
+  if (/youtube(-nocookie)?\.com\/embed\//.test(final) || /youtube\.com\/watch/.test(final) || /youtu\.be/.test(final)) {
+    addYtActionBar(body, state.settings.previewUrl || final);
+  }
+}
+
+function addYtActionBar(body, originalUrl) {
+  const bar = document.createElement('div');
+  bar.className = 'yt-actions';
+  bar.innerHTML = `
+    <button class="yt-action" id="yt-ext" title="Abrir en navegador">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      <span>Abrir en navegador</span>
+    </button>`;
+  body.appendChild(bar);
+  bar.querySelector('#yt-ext').addEventListener('click', () => openExternal(originalUrl));
+}
+
+async function playFloating(url) {
+  try {
+    const avail = await invoke('check_player_available');
+    if (!avail.canPlayYoutube) {
+      const missing = [];
+      if (!avail.mpv) missing.push('mpv');
+      if (!avail.ytdlp) missing.push('yt-dlp');
+      toast('Falta instalar: ' + missing.join(' + ') + ' (sudo pacman -S ' + missing.join(' ') + ')');
+      return;
+    }
+    // Calculate screen position of the preview-body so mpv overlays it
+    const rect = $('#preview-body').getBoundingClientRect();
+    let winPos = { x: 0, y: 0 };
+    try {
+      const pos = await tauriWin().outerPosition();
+      winPos = { x: pos.x, y: pos.y };
+    } catch {}
+    const dpr = window.devicePixelRatio || 1;
+    const args = {
+      url: normalizeUrl(url),
+      x: Math.round(winPos.x + rect.left * dpr),
+      y: Math.round(winPos.y + rect.top * dpr),
+      w: Math.round(rect.width * dpr),
+      h: Math.round(rect.height * dpr)
+    };
+    await invoke('play_in_mpv', args);
+    toast('Abierto en mpv encima del preview');
+  } catch (e) {
+    toast('Error mpv: ' + e);
+  }
+}
+
+async function openExternal(url) {
+  try {
+    const fixed = normalizeUrl(url);
+    await invoke('open_url_external', { url: fixed });
+    toast('Abriendo en navegador…');
+  } catch (e) {
+    toast('Error: ' + e);
+  }
 }
 
 function showAdblockBlocked(body, url, rule) {
@@ -420,15 +486,18 @@ function showAdblockBlocked(body, url, rule) {
 function updateShieldBadge(ok, url) {
   const sh = $('#shield-badge');
   if (!sh) return;
+  const SHIELD_OK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+  const SHIELD_BLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>`;
+  const SHIELD_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
   if (!state.settings.adblockEnabled) {
-    sh.textContent = '○';
+    sh.innerHTML = SHIELD_OFF;
     sh.title = 'Adblock desactivado';
-    sh.className = 'shield-badge off';
+    sh.className = 'tool-btn shield-badge off';
     return;
   }
-  sh.textContent = ok ? '🛡' : '⊘';
+  sh.innerHTML = ok ? SHIELD_OK : SHIELD_BLOCK;
   sh.title = ok ? 'Adblock activo · permitido' : 'Adblock bloqueó: ' + url;
-  sh.className = 'shield-badge ' + (ok ? 'on' : 'block');
+  sh.className = 'tool-btn shield-badge ' + (ok ? 'on' : 'block');
 }
 
 function showPreviewEmpty(body, msg) {
@@ -543,11 +612,97 @@ function wirePreviewBar() {
   invoke('adblock_set_enabled', { enabled: !!state.settings.adblockEnabled }).catch(()=>{});
 }
 
+// Code-like extensions that get auto-close brackets/tags
+const CODE_EXTS = new Set(['html','css','js','py','rs','sh','cfg','json']);
+
+function isCodeFile() {
+  const t = activeTab();
+  return t && CODE_EXTS.has(t.ext);
+}
+
+// Insert text at caret and place caret at offset from the end
+function insertAtCaret(text, caretOffsetFromEnd = 0) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const node = document.createTextNode(text);
+  range.insertNode(node);
+  // Move caret to text.length - caretOffsetFromEnd
+  const pos = text.length - caretOffsetFromEnd;
+  const newRange = document.createRange();
+  newRange.setStart(node, Math.max(0, Math.min(pos, text.length)));
+  newRange.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+}
+
+// Get plain text content of editor up to caret (for tag matching)
+function textBeforeCaret() {
+  const ed = $('.editor-area');
+  if (!ed) return '';
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return '';
+  const range = sel.getRangeAt(0).cloneRange();
+  range.setStart(ed, 0);
+  return range.toString();
+}
+
+// HTML void elements that should NOT auto-close
+const VOID_TAGS = new Set(['area','base','br','col','embed','hr','img','input','keygen','link','meta','param','source','track','wbr','!doctype','!--']);
+
 function onEditorKeydown(e) {
-  // Tab inserts spaces in mono mode, indent otherwise
+  // Tab — insert 2 spaces (or 4 for non-code)
   if (e.key === 'Tab') {
     e.preventDefault();
-    document.execCommand('insertText', false, '    ');
+    document.execCommand('insertText', false, isCodeFile() ? '  ' : '    ');
+    return;
+  }
+
+  if (!isCodeFile()) return;
+
+  // Bracket / quote pairing — insert pair + caret in middle
+  const PAIRS = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`' };
+  if (PAIRS[e.key]) {
+    // Don't auto-close quotes if next char is alphanumeric (likely apostrophe in text)
+    e.preventDefault();
+    insertAtCaret(e.key + PAIRS[e.key], 1);
+    onEditorInput();
+    return;
+  }
+
+  // Auto-close HTML tag when user types `>`
+  if (e.key === '>') {
+    const t = activeTab();
+    if (!t || t.ext !== 'html') return;
+    const before = textBeforeCaret();
+    // Match last opening tag like `<tagname` or `<tagname attr="...">` (no `/` at start, no `/` at end)
+    const m = before.match(/<([A-Za-z][A-Za-z0-9-]*)(?:\s[^<>]*)?$/);
+    if (!m) return;
+    const tag = m[1].toLowerCase();
+    if (VOID_TAGS.has(tag)) return;
+    // Check if already self-closing (ends with /)
+    if (/\/\s*$/.test(before)) return;
+    e.preventDefault();
+    insertAtCaret('></' + m[1] + '>', m[1].length + 3);
+    onEditorInput();
+    return;
+  }
+
+  // Skip-over closing pair if user types the same closing char already present
+  if ([')', ']', '}', '"', "'", '`'].includes(e.key)) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+    const r = sel.getRangeAt(0);
+    const node = r.startContainer;
+    if (node.nodeType === 3 && node.textContent.charAt(r.startOffset) === e.key) {
+      e.preventDefault();
+      const nr = document.createRange();
+      nr.setStart(node, r.startOffset + 1);
+      nr.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(nr);
+    }
   }
 }
 
@@ -742,6 +897,15 @@ function wireSettings() {
   wireToggle('tg-yt-direct', 'youtubeDirect', () => {
     if (state.settings.previewOpen) renderPreview();
   });
+  const openSc = document.getElementById('open-shortcuts');
+  if (openSc) openSc.addEventListener('click', () => toggleShortcutsPalette(true));
+  const resetSc = document.getElementById('reset-shortcuts');
+  if (resetSc) resetSc.addEventListener('click', () => {
+    if (!confirm('¿Restablecer TODOS los atajos a su valor por defecto?')) return;
+    state.settings.shortcuts = {};
+    saveState();
+    toast('Atajos restablecidos');
+  });
 }
 
 // ───────── FULLSCREEN ─────────
@@ -798,6 +962,8 @@ function wireWindow() {
   });
   $('#theme-btn').addEventListener('click', cycleTheme);
   $('#fullscreen-btn').addEventListener('click', toggleFullscreen);
+  const scBtn = document.getElementById('shortcuts-btn');
+  if (scBtn) scBtn.addEventListener('click', () => toggleShortcutsPalette());
   $('#settings-btn').addEventListener('click', () => showPage(currentPage === 'settings' ? 'editor' : 'settings'));
   $('#preview-btn').addEventListener('click', () => { showPage('editor'); togglePreview(); });
   $('#new-btn').addEventListener('click', () => { showPage('editor'); newTab(); });
@@ -821,112 +987,297 @@ function wireToolbar() {
   });
 }
 
+// ───────── SHORTCUTS REGISTRY ─────────
+// Each action: id, label, default binding, run(e), section.
+// Bindings are strings like "Ctrl+N", "Ctrl+Shift+S", "F11", "Ctrl+Tab".
+const ACTIONS = [
+  // File
+  { id:'new-tab',      sec:'Archivo',  label:'Nueva pestaña',     def:'Ctrl+N',     run:()=>{ showPage('editor'); newTab(); } },
+  { id:'new-tab-alt',  sec:'Archivo',  label:'Nueva pestaña (alt)',def:'Ctrl+T',    run:()=>{ showPage('editor'); newTab(); } },
+  { id:'open-file',    sec:'Archivo',  label:'Abrir archivo',     def:'Ctrl+O',     run:()=>{ showPage('editor'); openFile(); } },
+  { id:'save',         sec:'Archivo',  label:'Guardar',           def:'Ctrl+S',     run:()=>saveFile(false) },
+  { id:'save-as',      sec:'Archivo',  label:'Guardar como',      def:'Ctrl+Shift+S', run:()=>saveFile(true) },
+  { id:'close-tab',    sec:'Archivo',  label:'Cerrar pestaña',    def:'Ctrl+W',     run:()=>{ if (activeId) closeTab(activeId); } },
+  // Navigation
+  { id:'next-tab-mru', sec:'Navegación',label:'Pestaña anterior usada', def:'Ctrl+Tab', run:()=>cycleTab('mru') },
+  { id:'prev-tab',     sec:'Navegación',label:'Pestaña previa',   def:'Ctrl+Shift+Tab', run:()=>cycleTab('prev') },
+  { id:'preview',      sec:'Vista',    label:'Mostrar/ocultar preview', def:'Ctrl+P', run:()=>{ showPage('editor'); togglePreview(); } },
+  { id:'settings',     sec:'Vista',    label:'Abrir/cerrar ajustes', def:'Ctrl+,',   run:()=>showPage(currentPage === 'settings' ? 'editor' : 'settings') },
+  { id:'fullscreen',   sec:'Vista',    label:'Pantalla completa', def:'F11',        run:()=>toggleFullscreen() },
+  { id:'shortcuts',    sec:'Vista',    label:'Mostrar atajos',    def:'Ctrl+/',     run:()=>toggleShortcutsPalette() },
+  // Format
+  { id:'bold',         sec:'Formato',  label:'Negrita',           def:'Ctrl+B',     run:()=>{ if (currentPage==='editor') exec('bold'); } },
+  { id:'italic',       sec:'Formato',  label:'Cursiva',           def:'Ctrl+I',     run:()=>{ if (currentPage==='editor') exec('italic'); } },
+  { id:'underline',    sec:'Formato',  label:'Subrayado',         def:'Ctrl+U',     run:()=>{ if (currentPage==='editor') exec('underline'); } },
+  // Edit
+  { id:'undo',         sec:'Edición',  label:'Deshacer',          def:'Ctrl+Z',     run:()=>doUndoRedo(false) },
+  { id:'redo',         sec:'Edición',  label:'Rehacer',           def:'Ctrl+Y',     run:()=>doUndoRedo(true) },
+  { id:'redo-alt',     sec:'Edición',  label:'Rehacer (alt)',     def:'Ctrl+Shift+Z', run:()=>doUndoRedo(true) },
+  { id:'select-all',   sec:'Edición',  label:'Seleccionar todo',  def:'Ctrl+A',     run:()=>doSelectAll() },
+  // Zoom
+  { id:'zoom-in',      sec:'Zoom',     label:'Aumentar texto',    def:'Ctrl++',     run:()=>zoomBy(+10) },
+  { id:'zoom-out',     sec:'Zoom',     label:'Reducir texto',     def:'Ctrl+-',     run:()=>zoomBy(-10) },
+  { id:'zoom-reset',   sec:'Zoom',     label:'Tamaño 100%',       def:'Ctrl+0',     run:()=>zoomReset() },
+];
+
+function getBinding(actionId) {
+  const custom = (state.settings.shortcuts || {})[actionId];
+  if (custom === '') return '';   // user disabled
+  if (custom) return custom;
+  const a = ACTIONS.find(x => x.id === actionId);
+  return a ? a.def : '';
+}
+
+function setBinding(actionId, combo) {
+  state.settings.shortcuts = state.settings.shortcuts || {};
+  state.settings.shortcuts[actionId] = combo;
+  saveState();
+}
+
+function resetBinding(actionId) {
+  if (state.settings.shortcuts) {
+    delete state.settings.shortcuts[actionId];
+    saveState();
+  }
+}
+
+// Normalize a KeyboardEvent into a binding string like "Ctrl+Shift+B"
+function eventToCombo(e) {
+  const parts = [];
+  if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  let k = e.key;
+  // Normalize special names
+  if (k === ' ') k = 'Space';
+  else if (k.length === 1) k = k.toUpperCase();
+  // Filter out lone modifiers
+  if (['Control','Shift','Alt','Meta'].includes(k)) return null;
+  parts.push(k);
+  return parts.join('+');
+}
+
+// Compare two combos in canonical order
+function comboMatches(combo, eventCombo) {
+  if (!combo) return false;
+  // Normalize both to canonical form (sorted modifiers + final key)
+  const norm = c => {
+    const segs = c.split('+');
+    const final = segs.pop();
+    const mods = segs.map(s => s.trim()).sort().join('+');
+    const finalNorm = final.length === 1 ? final.toUpperCase() : final;
+    return (mods ? mods + '+' : '') + finalNorm;
+  };
+  return norm(combo).toLowerCase() === norm(eventCombo).toLowerCase();
+}
+
+// Helpers
+function cycleTab(mode) {
+  if (tabs.length < 2) return;
+  const idx = tabs.findIndex(t => t.id === activeId);
+  if (mode === 'mru') {
+    if (prevId && getTab(prevId)) setActive(prevId);
+    else setActive(tabs[(idx + 1) % tabs.length].id);
+  } else if (mode === 'prev') {
+    setActive(tabs[(idx - 1 + tabs.length) % tabs.length].id);
+  }
+}
+
+function doUndoRedo(redo) {
+  if (currentPage !== 'editor') return;
+  const ed = $('.editor-area');
+  if (!ed) return;
+  ed.focus();
+  document.execCommand(redo ? 'redo' : 'undo');
+  refreshToolbarState();
+  onEditorInput();
+}
+
+function doSelectAll() {
+  if (currentPage !== 'editor') return;
+  const ed = $('.editor-area');
+  if (!ed) return;
+  const r = document.createRange();
+  r.selectNodeContents(ed);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+let capturingCombo = false;
+
 function wireKeys() {
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); return; }
-    if (e.key === 'Escape' && isFullscreen) { toggleFullscreen(); return; }
-    const ctrl = e.ctrlKey || e.metaKey;
-    if (!ctrl) {
-      if (e.key === 'Escape' && currentPage !== 'editor') { showPage('editor'); }
-      return;
-    }
-    const k = e.key.toLowerCase();
-    if (k === 't' || k === 'n') { e.preventDefault(); showPage('editor'); newTab(); return; }
-    if (k === 'o') { e.preventDefault(); showPage('editor'); openFile(); return; }
-    if (k === 's') {
-      e.preventDefault();
-      saveFile(e.shiftKey);
-      return;
-    }
-    if (k === 'w') {
-      e.preventDefault();
-      if (activeId) closeTab(activeId);
-      return;
-    }
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      if (tabs.length < 2) return;
-      if (e.shiftKey) {
-        const idx = tabs.findIndex(t => t.id === activeId);
-        const next = tabs[(idx - 1 + tabs.length) % tabs.length];
-        setActive(next.id);
-      } else {
-        // Toggle to last-used (Ctrl+Tab → MRU pair)
-        if (prevId && getTab(prevId)) setActive(prevId);
-        else {
-          const idx = tabs.findIndex(t => t.id === activeId);
-          setActive(tabs[(idx + 1) % tabs.length].id);
-        }
+    if (capturingCombo) return;   // combo capture has its own handler
+    const combo = eventToCombo(e);
+    if (!combo) return;
+    // Escape special — close modal/return to editor
+    if (e.key === 'Escape') {
+      if ($('#shortcuts-palette')?.classList.contains('open')) {
+        e.preventDefault(); toggleShortcutsPalette(false); return;
       }
+      if (isFullscreen) { e.preventDefault(); toggleFullscreen(); return; }
+      if (currentPage !== 'editor') { e.preventDefault(); showPage('editor'); return; }
       return;
     }
-    if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(+10); return; }
-    if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomBy(-10); return; }
-    if (e.key === '0') { e.preventDefault(); zoomReset(); return; }
-    if (k === 'b' || k === 'i' || k === 'u') {
-      e.preventDefault();
-      if (currentPage !== 'editor') return;
-      exec(k === 'b' ? 'bold' : k === 'i' ? 'italic' : 'underline');
-      return;
-    }
-    if (k === 'p') {
-      e.preventDefault();
-      showPage('editor');
-      togglePreview();
-      return;
-    }
-    if (k === 'z') {
-      // Ctrl+Z undo, Ctrl+Shift+Z redo
-      if (currentPage !== 'editor') return;
-      const ed = $('.editor-area');
-      if (!ed) return;
-      e.preventDefault();
-      ed.focus();
-      document.execCommand(e.shiftKey ? 'redo' : 'undo');
-      refreshToolbarState();
-      onEditorInput();
-      return;
-    }
-    if (k === 'y') {
-      if (currentPage !== 'editor') return;
-      const ed = $('.editor-area');
-      if (!ed) return;
-      e.preventDefault();
-      ed.focus();
-      document.execCommand('redo');
-      refreshToolbarState();
-      onEditorInput();
-      return;
-    }
-    if (k === 'a') {
-      // Let native select-all work inside editor
-      if (currentPage !== 'editor') return;
-      const ed = $('.editor-area');
-      if (!ed) return;
-      e.preventDefault();
-      const r = document.createRange();
-      r.selectNodeContents(ed);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(r);
-      return;
-    }
-    if (k === ',' || k === '.') {
-      e.preventDefault();
-      showPage(currentPage === 'settings' ? 'editor' : 'settings');
-      return;
+    for (const a of ACTIONS) {
+      if (comboMatches(getBinding(a.id), combo)) {
+        e.preventDefault();
+        try { a.run(e); } catch (err) { console.error(err); }
+        return;
+      }
     }
   });
-  // Ctrl+wheel for zoom
+  // Ctrl+wheel zoom
   window.addEventListener('wheel', (e) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       zoomBy(e.deltaY < 0 ? +10 : -10);
     }
   }, { passive:false });
-  // Pinch zoom block
   window.addEventListener('gesturestart', e => e.preventDefault());
   document.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+// ───────── SHORTCUTS PALETTE (modal) ─────────
+function ensurePaletteDom() {
+  if ($('#shortcuts-palette')) return;
+  const p = document.createElement('div');
+  p.id = 'shortcuts-palette';
+  p.className = 'sc-palette';
+  p.innerHTML = `
+    <div class="sc-backdrop"></div>
+    <div class="sc-card" role="dialog" aria-modal="true" aria-label="Atajos">
+      <div class="sc-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="sc-search" id="sc-search" placeholder="Buscar atajo… (acción o tecla)" autocomplete="off" spellcheck="false">
+        <button class="sc-close" id="sc-close" title="Cerrar (Esc)">×</button>
+      </div>
+      <div class="sc-list" id="sc-list"></div>
+      <div class="sc-foot">
+        <span>↵ ejecutar · click derecho editar · doble click resetear</span>
+        <button class="sc-reset-all" id="sc-reset-all">Restablecer todos</button>
+      </div>
+    </div>`;
+  document.body.appendChild(p);
+  $('#sc-close').addEventListener('click', () => toggleShortcutsPalette(false));
+  p.querySelector('.sc-backdrop').addEventListener('click', () => toggleShortcutsPalette(false));
+  $('#sc-search').addEventListener('input', renderShortcutsList);
+  $('#sc-reset-all').addEventListener('click', () => {
+    if (!confirm('¿Restablecer TODOS los atajos a su valor por defecto?')) return;
+    state.settings.shortcuts = {};
+    saveState();
+    renderShortcutsList();
+  });
+}
+
+function toggleShortcutsPalette(force) {
+  ensurePaletteDom();
+  const p = $('#shortcuts-palette');
+  const open = force === undefined ? !p.classList.contains('open') : !!force;
+  p.classList.toggle('open', open);
+  if (open) {
+    renderShortcutsList();
+    setTimeout(() => $('#sc-search').focus(), 50);
+  }
+}
+
+function renderShortcutsList() {
+  const list = $('#sc-list');
+  if (!list) return;
+  const q = ($('#sc-search')?.value || '').toLowerCase().trim();
+  // Group by section
+  const groups = {};
+  for (const a of ACTIONS) {
+    const binding = getBinding(a.id);
+    if (q && !a.label.toLowerCase().includes(q) && !a.sec.toLowerCase().includes(q) && !binding.toLowerCase().includes(q)) continue;
+    (groups[a.sec] = groups[a.sec] || []).push({ ...a, binding });
+  }
+  list.innerHTML = '';
+  if (Object.keys(groups).length === 0) {
+    list.innerHTML = '<div class="sc-empty">Sin resultados.</div>';
+    return;
+  }
+  for (const sec of Object.keys(groups)) {
+    const h = document.createElement('div');
+    h.className = 'sc-section';
+    h.textContent = sec;
+    list.appendChild(h);
+    for (const a of groups[sec]) {
+      const row = document.createElement('div');
+      row.className = 'sc-row';
+      row.tabIndex = 0;
+      row.dataset.id = a.id;
+      const customized = (state.settings.shortcuts || {})[a.id] !== undefined;
+      row.innerHTML = `
+        <span class="sc-label">${escapeHtml(a.label)}${customized ? ' <span class="sc-dot" title="Personalizado">●</span>' : ''}</span>
+        <span class="sc-combo">${renderCombo(a.binding)}</span>`;
+      row.addEventListener('click', () => {
+        toggleShortcutsPalette(false);
+        try { a.run(); } catch (err) { console.error(err); }
+      });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        startCaptureFor(a.id, row);
+      });
+      row.addEventListener('dblclick', () => {
+        resetBinding(a.id);
+        renderShortcutsList();
+        toast('Atajo restablecido');
+      });
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { row.click(); }
+        else if (e.key === 'F2' || e.key === ' ') { e.preventDefault(); startCaptureFor(a.id, row); }
+      });
+      list.appendChild(row);
+    }
+  }
+}
+
+function renderCombo(combo) {
+  if (!combo) return '<em class="sc-disabled">(sin asignar)</em>';
+  return combo.split('+').map(k => `<kbd>${escapeHtml(k)}</kbd>`).join('<span class="sc-plus">+</span>');
+}
+
+function startCaptureFor(actionId, row) {
+  const combo = row.querySelector('.sc-combo');
+  combo.innerHTML = '<em class="sc-capturing">Pulsa combinación…</em>';
+  capturingCombo = true;
+  const onKey = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      capturingCombo = false;
+      window.removeEventListener('keydown', onKey, true);
+      renderShortcutsList();
+      return;
+    }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      capturingCombo = false;
+      window.removeEventListener('keydown', onKey, true);
+      setBinding(actionId, '');
+      renderShortcutsList();
+      toast('Atajo desactivado');
+      return;
+    }
+    const c = eventToCombo(e);
+    if (!c) return;  // wait for non-modifier
+    capturingCombo = false;
+    window.removeEventListener('keydown', onKey, true);
+    // Check conflict
+    const conflict = ACTIONS.find(a => a.id !== actionId && comboMatches(getBinding(a.id), c));
+    if (conflict) {
+      if (!confirm(`"${c}" ya se usa para "${conflict.label}". ¿Sobrescribir?`)) {
+        renderShortcutsList();
+        return;
+      }
+      setBinding(conflict.id, '');
+    }
+    setBinding(actionId, c);
+    renderShortcutsList();
+    toast('Atajo: ' + c);
+  };
+  window.addEventListener('keydown', onKey, true);
 }
 
 function wireSystemTheme() {

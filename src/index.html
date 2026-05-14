@@ -26,6 +26,9 @@
       <button id="preview-btn" class="tb-icon-btn" title="Previsualizar (Ctrl+P)" aria-label="Previsualizar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
+      <button id="shortcuts-btn" class="tb-icon-btn" title="Atajos (Ctrl+/)" aria-label="Atajos">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M8 14h8"/></svg>
+      </button>
       <button id="fullscreen-btn" class="tb-icon-btn" title="Pantalla completa (F11)" aria-label="Pantalla completa">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
       </button>
@@ -100,24 +103,40 @@
               <button class="pill" data-pmode="url" title="Cargar URL externa">URL</button>
             </div>
             <input type="text" class="url-input" id="url-input" placeholder="https://… · youtube.com/watch?v=… · localhost:3000" spellcheck="false">
-            <button class="tool-btn" id="url-go" title="Cargar (Enter)" aria-label="Cargar">↵</button>
+            <button class="tool-btn" id="url-go" title="Cargar (Enter)" aria-label="Cargar">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+            </button>
             <button class="tool-btn" id="preview-refresh" title="Recargar" aria-label="Recargar">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
             </button>
-            <button class="tool-btn shield-badge on" id="shield-badge" title="Adblock activo">🛡</button>
+            <button class="tool-btn shield-badge on" id="shield-badge" title="Adblock activo" aria-label="Adblock">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </button>
             <button class="tool-btn" id="preview-close" title="Cerrar preview" aria-label="Cerrar preview">×</button>
           </div>
           <div class="preview-body" id="preview-body"></div>
         </div>
       </div>
       <div class="statusbar" id="statusbar">
-        <span class="status-left" id="status-path">Sin título</span>
+        <span class="status-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span id="status-path">Sin título</span>
+        </span>
         <span class="status-right">
-          <span id="status-lang">Texto</span>
+          <span class="status-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            <span id="status-lang">Texto</span>
+          </span>
           <span class="status-dot">·</span>
-          <span id="status-chars">0 caracteres</span>
+          <span class="status-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+            <span id="status-chars">0 caracteres</span>
+          </span>
           <span class="status-dot">·</span>
-          <span id="status-lines">1 línea</span>
+          <span class="status-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <span id="status-lines">1 línea</span>
+          </span>
         </span>
       </div>
     </div>
@@ -178,24 +197,21 @@
           </div>
         </div>
 
-        <div class="section-header">Atajos</div>
+        <div class="section-header">Atajos de teclado</div>
         <div class="detail-card">
-          <div class="detail-item"><div class="dt">Ctrl+N</div><div class="ds">Nueva pestaña</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+T</div><div class="ds">Nueva pestaña</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+W</div><div class="ds">Cerrar pestaña</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+O</div><div class="ds">Abrir archivo</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+S</div><div class="ds">Guardar</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+Shift+S</div><div class="ds">Guardar como</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+Tab</div><div class="ds">Pestaña anterior usada</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+Shift+Tab</div><div class="ds">Pestaña previa</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+B / I / U</div><div class="ds">Negrita / Cursiva / Subrayado</div></div>
-          <div class="detail-item"><div class="dt">Ctrl + / Ctrl -</div><div class="ds">Aumentar / Reducir texto</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+0</div><div class="ds">Tamaño 100%</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+P</div><div class="ds">Mostrar/ocultar previsualización</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+Z / Ctrl+Y</div><div class="ds">Deshacer / Rehacer</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+Shift+Z</div><div class="ds">Rehacer (alternativo)</div></div>
-          <div class="detail-item"><div class="dt">Ctrl+A</div><div class="ds">Seleccionar todo</div></div>
-          <div class="detail-item"><div class="dt">F11</div><div class="ds">Pantalla completa (Escape para salir)</div></div>
+          <div class="detail-item detail-item-row clickable" id="open-shortcuts">
+            <div class="detail-texts">
+              <div class="dt">Personalizar atajos</div>
+              <div class="ds">Abre el panel de atajos · click derecho una fila para editar</div>
+            </div>
+            <kbd class="kbd-hint">Ctrl+/</kbd>
+          </div>
+          <div class="detail-item detail-item-row clickable" id="reset-shortcuts">
+            <div class="detail-texts">
+              <div class="dt">Restablecer todos</div>
+              <div class="ds">Vuelve a los valores por defecto</div>
+            </div>
+          </div>
         </div>
 
         <div class="section-header">Acerca de</div>

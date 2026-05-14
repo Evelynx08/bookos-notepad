@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Bookos Notepad
+GenericName=Editor de texto
+Comment=Bloc de notas con pestañas, previsualización y adblock
+Exec=bookos-notepad %F
+Icon=bookos-notepad
+Type=Application
+Categories=Utility;TextEditor;Office;
+MimeType=text/plain;text/markdown;text/html;text/css;text/x-shellscript;text/x-python;application/json;application/xml;
+StartupNotify=true
+StartupWMClass=Bookos Notepad
+Keywords=editor;notas;notepad;texto;markdown;html;
