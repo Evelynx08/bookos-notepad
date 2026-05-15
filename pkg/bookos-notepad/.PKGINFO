@@ -6,9 +6,9 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = Bloc de notas con pestañas, preview HTML/Markdown/URL y adblock para BookOS
 url = https://github.com/Evelynx08/bookos-notepad
-builddate = 1778786604
+builddate = 1778872124
 packager = Unknown Packager
-size = 16499554
+size = 16505218
 arch = x86_64
 license = MIT
 depend = webkit2gtk-4.1

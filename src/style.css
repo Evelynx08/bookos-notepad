@@ -226,6 +226,13 @@ body{font-family:'Onest','Inter','SF Pro Display',-apple-system,BlinkMacSystemFo
 .toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,30px);background:var(--card);color:var(--tx);border:1px solid var(--brd);font-size:13px;font-weight:500;padding:9px 18px;border-radius:18px;opacity:0;pointer-events:none;transition:opacity .2s var(--ease),transform .25s var(--ease);z-index:50;box-shadow:var(--sh-lg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* Update badge */
+.update-badge{font-size:18px;line-height:1;flex-shrink:0;transition:color .2s var(--ease)}
+.update-badge.hidden{display:none}
+.update-badge.ok{color:var(--green)}
+.update-badge.available{color:var(--orange);animation:badgePulse 2s var(--ease) infinite}
+@keyframes badgePulse{0%,100%{opacity:1}50%{opacity:.5}}
+
 /* clickable detail item */
 .detail-item.clickable{cursor:pointer;transition:background .15s var(--ease)}
 .detail-item.clickable:hover{background:var(--hov)}

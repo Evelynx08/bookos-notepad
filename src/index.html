@@ -214,10 +214,42 @@
           </div>
         </div>
 
+        <div class="section-header">Actualizaciones</div>
+        <div class="detail-card">
+          <div class="detail-item detail-item-row" id="update-status-row">
+            <div class="detail-texts">
+              <div class="dt">Estado</div>
+              <div class="ds" id="update-status">Comprobando…</div>
+            </div>
+            <span id="update-badge" class="update-badge hidden">●</span>
+          </div>
+          <div class="detail-item detail-item-row clickable" id="update-check">
+            <div class="detail-texts">
+              <div class="dt">Buscar actualizaciones</div>
+              <div class="ds">Comprueba ahora en repositorios pacman / AUR</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="detail-item detail-item-row clickable" id="update-open-release">
+            <div class="detail-texts">
+              <div class="dt">Ver últimas versiones</div>
+              <div class="ds">Abre página de releases en GitHub</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </div>
+          <div class="detail-item detail-item-row clickable" id="update-open-settings">
+            <div class="detail-texts">
+              <div class="dt">Actualizar desde BookOS Settings</div>
+              <div class="ds">Abre el centro de actualizaciones del sistema</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+
         <div class="section-header">Acerca de</div>
         <div class="detail-card">
           <div class="detail-item detail-item-row">
-            <div class="detail-texts"><div class="dt">Bookos Notepad</div><div class="ds">Versión 0.1.0 · BookOS</div></div>
+            <div class="detail-texts"><div class="dt">Bookos Notepad</div><div class="ds">Versión <span id="about-version">0.1.0</span> · BookOS</div></div>
           </div>
         </div>
       </div>

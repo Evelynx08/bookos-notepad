@@ -58,7 +58,16 @@ fn detect_system_theme() -> String {
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| e.to_string())
+    let bytes = fs::read(&path).map_err(|e| format!("read({}): {}", path, e))?;
+    // Strip UTF-8 BOM if present
+    let bytes = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) { &bytes[3..] } else { &bytes[..] };
+    // UTF-16 LE/BE BOM → decode with replacement chars
+    if bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) {
+        // Naive UTF-16 → return error suggesting save-as
+        return Err(format!("UTF-16 no soportado: {}", path));
+    }
+    // Lossy UTF-8: replace invalid bytes instead of failing
+    Ok(String::from_utf8_lossy(bytes).into_owned())
 }
 
 #[tauri::command]
@@ -73,6 +82,33 @@ fn open_url_external(url: String) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Launch bookos-settings on the "updates" page. Uses the temp-file
+/// single-instance signal that bookos-settings reads at startup.
+#[tauri::command]
+fn open_bookos_updates() -> Result<(), String> {
+    // Write the temp file FIRST so a running bookos-settings picks it up.
+    let _ = std::fs::write("/tmp/bookos-start-page", "actualizacion");
+    // Launch (or focus if already running — bookos-settings is single-instance).
+    Command::new("bookos-settings")
+        .args(["--page", "actualizacion"])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| {
+            // Fallback: try xdg-open .desktop
+            let _ = Command::new("xdg-open").arg("application://bookos-settings.desktop").spawn();
+            format!("bookos-settings launch failed: {}", e)
+        })
+}
+
+/// Returns current version + package name; frontend does GitHub Releases API call.
+#[tauri::command]
+fn app_version_info() -> serde_json::Value {
+    serde_json::json!({
+        "current": env!("CARGO_PKG_VERSION"),
+        "package": env!("CARGO_PKG_NAME"),
+    })
 }
 
 /// Launch mpv as a floating window (acts like PiP — always-on-top, no border).
@@ -137,6 +173,8 @@ fn main() {
             open_url_external,
             play_in_mpv,
             check_player_available,
+            open_bookos_updates,
+            app_version_info,
             adblock_engine::adblock_check,
             adblock_engine::adblock_cosmetic,
             adblock_engine::adblock_set_enabled,

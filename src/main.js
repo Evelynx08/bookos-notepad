@@ -759,11 +759,12 @@ async function openFile() {
     const sel = await dialog().open({
       multiple: true,
       filters: [
-        { name: 'Texto', extensions: ['txt','md','markdown','log','rst'] },
-        { name: 'Código', extensions: ['sh','bash','zsh','fish','py','js','mjs','ts','tsx','jsx','rs','c','cpp','h','hpp','java','go','rb','php','lua','swift','kt'] },
-        { name: 'Web', extensions: ['html','htm','css','scss','sass','less','xml','svg','json'] },
-        { name: 'Config', extensions: ['cfg','conf','ini','toml','yaml','yml','desktop'] },
-        { name: 'Todos', extensions: ['*'] }
+        { name: 'Todos los archivos', extensions: ['*'] },
+        { name: 'Texto y notas', extensions: ['txt','md','markdown','log','rst','tex'] },
+        { name: 'Código', extensions: ['sh','bash','zsh','fish','py','js','mjs','cjs','ts','tsx','jsx','rs','c','cpp','cc','h','hpp','java','go','rb','php','lua','swift','kt','dart','rb','pl','r','jl','vim','el','clj'] },
+        { name: 'Web', extensions: ['html','htm','xhtml','css','scss','sass','less','xml','svg','json','jsonc','yaml','yml','vue','astro'] },
+        { name: 'Config', extensions: ['cfg','conf','ini','toml','yaml','yml','desktop','env','gitignore','gitattributes','editorconfig'] },
+        { name: 'Datos', extensions: ['csv','tsv','sql','log','xml'] }
       ]
     });
     if (!sel) return;
@@ -775,8 +776,9 @@ async function openFile() {
     }
     toast(`Abierto: ${paths.length} archivo${paths.length>1?'s':''}`);
   } catch (e) {
-    console.error(e);
-    toast('Error al abrir');
+    console.error('openFile error:', e);
+    const msg = (e && e.message) || (typeof e === 'string' ? e : JSON.stringify(e));
+    toast('Error: ' + msg.slice(0, 120));
   }
 }
 
@@ -833,7 +835,7 @@ function showPage(name) {
   }
   $('#settings-btn').classList.toggle('active', name === 'settings');
   $('#toolbar').style.display = name === 'editor' ? '' : 'none';
-  if (name === 'settings') renderSettings();
+  if (name === 'settings') { renderSettings(); checkUpdates(); }
   else { renderEditor(); }
 }
 
@@ -906,6 +908,97 @@ function wireSettings() {
     saveState();
     toast('Atajos restablecidos');
   });
+  // Updates section
+  const upCheck = document.getElementById('update-check');
+  if (upCheck) upCheck.addEventListener('click', () => checkUpdates(true));
+  const upRel = document.getElementById('update-open-release');
+  if (upRel) upRel.addEventListener('click', async () => {
+    const url = `https://github.com/${GH_REPO}/releases`;
+    try { await invoke('open_url_external', { url }); toast('Abriendo GitHub…'); }
+    catch (e) { console.error(e); toast('Error: ' + e); }
+  });
+  const upOpen = document.getElementById('update-open-settings');
+  if (upOpen) upOpen.addEventListener('click', async () => {
+    try {
+      await invoke('open_bookos_updates');
+      toast('Abriendo BookOS Settings…');
+    } catch (e) {
+      console.error(e);
+      toast('No se pudo abrir BookOS Settings');
+    }
+  });
+}
+
+// GitHub repo for releases
+const GH_REPO = 'Evelynx08/bookos-notepad';
+
+let _updateCheckPromise = null;
+let _lastUpdateCheck = 0;
+async function checkUpdates(force = false) {
+  const statusEl = document.getElementById('update-status');
+  const badge = document.getElementById('update-badge');
+  if (!statusEl) return;
+  // Throttle: max 1 check per 60s unless forced
+  if (!force && Date.now() - _lastUpdateCheck < 60000 && _lastUpdateCheck > 0) return;
+  statusEl.textContent = 'Comprobando GitHub…';
+  if (badge) badge.classList.add('hidden');
+  if (_updateCheckPromise) return _updateCheckPromise;
+  _updateCheckPromise = (async () => {
+    let info;
+    try { info = await invoke('app_version_info'); }
+    catch { info = { current: '0.1.0', package: 'bookos-notepad' }; }
+    const cur = info.current || '0.1.0';
+    const aboutV = document.getElementById('about-version');
+    if (aboutV) aboutV.textContent = cur;
+    try {
+      const resp = await fetch(`https://api.github.com/repos/${GH_REPO}/releases/latest`, {
+        headers: { 'Accept': 'application/vnd.github+json' },
+        cache: 'no-cache'
+      });
+      if (resp.status === 404) {
+        statusEl.textContent = `Versión ${cur} · Sin releases publicados aún`;
+        if (badge) badge.classList.add('hidden');
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      const tag = (data.tag_name || data.name || '').replace(/^v/i, '').trim();
+      if (!tag) {
+        statusEl.textContent = `Versión ${cur} · Respuesta GitHub inválida`;
+        return;
+      }
+      const cmp = compareVersions(tag, cur);
+      if (cmp > 0) {
+        statusEl.textContent = `Actualización disponible: ${cur} → ${tag}`;
+        if (badge) { badge.classList.remove('hidden'); badge.className = 'update-badge available'; }
+        toast('Nueva versión: ' + tag);
+        statusEl.dataset.release = data.html_url || '';
+        statusEl.dataset.notes = (data.body || '').slice(0, 500);
+      } else {
+        statusEl.textContent = `Versión ${cur} · Estás al día`;
+        if (badge) { badge.classList.remove('hidden'); badge.className = 'update-badge ok'; }
+      }
+    } catch (e) {
+      console.error('Update check failed:', e);
+      statusEl.textContent = `Versión ${cur} · Sin conexión a GitHub`;
+    } finally {
+      _lastUpdateCheck = Date.now();
+    }
+  })();
+  _updateCheckPromise.finally(() => { _updateCheckPromise = null; });
+  return _updateCheckPromise;
+}
+
+// Semantic-ish compare: returns positive if a > b
+function compareVersions(a, b) {
+  const pa = a.split(/[.\-+]/).map(s => parseInt(s, 10) || 0);
+  const pb = b.split(/[.\-+]/).map(s => parseInt(s, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x - y;
+  }
+  return 0;
 }
 
 // ───────── FULLSCREEN ─────────
