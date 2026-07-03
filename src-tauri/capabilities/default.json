@@ -3,9 +3,6 @@
   "identifier": "default",
   "description": "Default permissions",
   "windows": ["main"],
-  "remote": {
-    "urls": ["http://localhost/*", "http://localhost:*/*"]
-  },
   "permissions": [
     "core:default",
     "core:webview:default",

@@ -3,7 +3,7 @@
   "identifier": "com.bookos.notepad",
   "productName": "Bookos Notepad",
   "mainBinaryName": "bookos-notepad",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",

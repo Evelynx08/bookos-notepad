@@ -1,5 +1,5 @@
 pkgname=bookos-notepad
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Bloc de notas con pestañas, preview HTML/Markdown/URL y adblock para BookOS"
 arch=('x86_64')
@@ -48,6 +48,9 @@ EOF
         "$pkgdir/usr/share/icons/hicolor/${sz}x${sz}/apps/bookos-notepad.png"
     done
   fi
+
+  [ -f "$startdir/src-tauri/icons/icon.svg" ] && install -Dm644 "$startdir/src-tauri/icons/icon.svg" \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/bookos-notepad.svg"
 
   if [ -f "$startdir/LICENSE" ]; then
     install -Dm644 "$startdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

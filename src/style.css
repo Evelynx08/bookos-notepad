@@ -226,6 +226,19 @@ body{font-family:'Onest','Inter','SF Pro Display',-apple-system,BlinkMacSystemFo
 .toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,30px);background:var(--card);color:var(--tx);border:1px solid var(--brd);font-size:13px;font-weight:500;padding:9px 18px;border-radius:18px;opacity:0;pointer-events:none;transition:opacity .2s var(--ease),transform .25s var(--ease);z-index:50;box-shadow:var(--sh-lg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* shield session counter */
+.shield-badge{position:relative}
+.shield-count{position:absolute;top:-3px;right:-3px;background:var(--red);color:#fff;font-size:9px;font-weight:700;line-height:1;padding:2px 4px;border-radius:8px;min-width:14px;text-align:center;font-family:'JetBrains Mono','SF Mono',Menlo,monospace;border:1.5px solid var(--bg)}
+
+/* status clickable chip */
+.status-button{background:0;border:0;color:var(--tx2);cursor:pointer;font:inherit;padding:2px 6px;border-radius:5px;transition:background .12s var(--ease),color .12s var(--ease)}
+.status-button:hover{background:var(--hov);color:var(--tx)}
+
+/* drag-drop hint */
+body.dropping{position:relative}
+body.dropping::after{content:"";position:fixed;inset:0;border:3px dashed var(--blue);border-radius:18px;pointer-events:none;z-index:200;background:color-mix(in srgb,var(--blue) 6%,transparent);animation:dropPulse .8s ease-in-out infinite alternate}
+@keyframes dropPulse{from{opacity:.5}to{opacity:1}}
+
 /* Update badge */
 .update-badge{font-size:18px;line-height:1;flex-shrink:0;transition:color .2s var(--ease)}
 .update-badge.hidden{display:none}
@@ -268,3 +281,35 @@ body{font-family:'Onest','Inter','SF Pro Display',-apple-system,BlinkMacSystemFo
 .sc-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--div);font-size:11px;color:var(--tx2);flex-shrink:0;flex-wrap:wrap}
 .sc-reset-all{background:0;border:0;color:var(--blue);cursor:pointer;font-family:inherit;font-size:11.5px;padding:4px 10px;border-radius:7px;transition:.15s var(--ease)}
 .sc-reset-all:hover{background:var(--hov)}
+
+/* mini-select for settings dropdowns */
+.mini-select{background:var(--sbg);border:0;color:var(--tx);font-family:inherit;font-size:12.5px;font-weight:500;padding:7px 30px 7px 12px;border-radius:9px;outline:0;cursor:pointer;max-width:240px;text-overflow:ellipsis;appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.mini-select option{background:var(--card);color:var(--tx);padding:6px}
+.mini-select:focus{box-shadow:0 0 0 2px var(--blue) inset;background-color:var(--card)}
+
+/* ───── FIND & REPLACE BAR ───── */
+#find-bar{position:fixed;left:0;right:0;bottom:42px;z-index:60;background:var(--card);border-top:1px solid var(--brd);border-bottom:1px solid var(--brd);box-shadow:0 -4px 16px rgba(0,0,0,.18);padding:8px 14px;display:none;flex-direction:column;gap:6px;backdrop-filter:saturate(180%) blur(20px);animation:findIn .18s var(--ease)}
+#find-bar.open{display:flex}
+#find-bar:not(.show-replace) .find-replace-row{display:none}
+@keyframes findIn{from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:none}}
+.find-row{display:flex;align-items:center;gap:5px}
+#find-input,#replace-input{flex:1;background:var(--sbg);border:0;outline:0;color:var(--tx);font-family:inherit;font-size:13px;padding:7px 11px;border-radius:8px;min-width:0}
+#find-input:focus,#replace-input:focus{box-shadow:0 0 0 2px var(--blue) inset}
+.find-btn{background:transparent;border:0;color:var(--tx2);width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s;flex:0 0 auto}
+.find-btn:hover{background:var(--hov);color:var(--tx)}
+.find-btn.active{background:var(--blue);color:#fff}
+.find-btn.find-text{width:auto;padding:0 11px;font-size:12px;font-weight:600}
+.find-count{font-size:11.5px;color:var(--tx2);min-width:62px;text-align:right;font-variant-numeric:tabular-nums;padding:0 2px}
+
+/* Native dropdown popup follows dark/light theme (webkit2gtk honors color-scheme) */
+:root.dark-mode .mini-select,:root.dark-mode #ui-lang{color-scheme:dark}
+:root.light-mode .mini-select,:root.light-mode #ui-lang{color-scheme:light}
+@media(prefers-color-scheme:dark){:root:not(.light-mode) .mini-select,:root:not(.light-mode) #ui-lang{color-scheme:dark}}
+.mini-select option{background-color:var(--card);color:var(--tx)}
+.mini-select option:checked,.mini-select option:hover{background-color:var(--blue);color:#fff}
+
+/* Highlight all find matches (CSS Custom Highlight API) */
+::highlight(find-match){background-color:rgba(255,204,0,.45);color:inherit}
+:root.dark-mode ::highlight(find-match){background-color:rgba(255,214,10,.4)}
+mark.find-hl{background-color:rgba(255,204,0,.45);color:inherit;border-radius:2px}
+:root.dark-mode mark.find-hl{background-color:rgba(255,214,10,.4);color:inherit}
