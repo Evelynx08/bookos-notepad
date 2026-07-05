@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "bookos-notepad"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "adblock",
  "dirs 5.0.1",
