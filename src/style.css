@@ -10,7 +10,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 *:focus{outline:none}
 *:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:6px}
 .tab:focus-visible,.tool-btn:focus-visible,.tb-icon-btn:focus-visible,button:focus-visible{outline-offset:-2px}
-body{font-family:'Onest','Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Roboto,sans-serif;color:var(--tx);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;letter-spacing:-.01em;user-select:none;-webkit-user-select:none}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Roboto,sans-serif;color:var(--tx);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;letter-spacing:-.01em;user-select:none;-webkit-user-select:none}
 
 /* #15 Scrollbar global custom */
 *::-webkit-scrollbar{width:8px;height:8px}
@@ -154,12 +154,12 @@ body{font-family:'Onest','Inter','SF Pro Display',-apple-system,BlinkMacSystemFo
 .editor-wrap{flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 18px 0;overflow:hidden}
 .editor-host{flex:1;min-height:0;background:var(--card);border-radius:18px;display:flex;flex-direction:column;overflow:hidden;position:relative;transition:background .25s var(--ease),box-shadow .25s var(--ease);box-shadow:var(--sh-sm)}
 .editor-host:focus-within{box-shadow:var(--sh-md)}
-.editor-area{flex:1;min-height:0;overflow:auto;padding:22px 26px;color:var(--tx);font-size:15px;line-height:1.6;outline:0;user-select:text;-webkit-user-select:text;caret-color:var(--blue);font-family:'Onest','Inter','SF Pro Display',-apple-system,sans-serif}
+.editor-area{flex:1;min-height:0;overflow:auto;padding:22px 26px;color:var(--tx);font-size:15px;line-height:1.6;outline:0;user-select:text;-webkit-user-select:text;caret-color:var(--blue);font-family:-apple-system,sans-serif}
 /* #11 Empty editor — center hint */
 .editor-area[contenteditable=true]:empty::before{content:attr(data-placeholder);color:var(--tx2);opacity:.45;pointer-events:none;font-size:14px;font-style:italic}
 .editor-area.nowrap{white-space:pre;overflow-wrap:normal}
 .editor-area.wrap{white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word}
-.editor-area.font-sans{font-family:'Onest','Inter','SF Pro Display',-apple-system,sans-serif}
+.editor-area.font-sans{font-family:-apple-system,sans-serif}
 .editor-area.font-serif{font-family:'New York','Times New Roman',Georgia,serif}
 .editor-area.font-mono{font-family:'JetBrains Mono','Fira Code','SF Mono',Menlo,Consolas,monospace}
 
