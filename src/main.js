@@ -1835,7 +1835,13 @@ function wireSystemTheme() {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   const handler = () => { if (state.theme === 'auto') applyTheme(); };
   if (mq.addEventListener) mq.addEventListener('change', handler);
-  setInterval(() => { if (state.theme === 'auto') applyTheme(); }, 5000);
+  // Sin sondeo: detect_system_theme lanza hasta 3 procesos por llamada y el
+  // setInterval de 5s que había aquí corría siempre, también con la ventana
+  // minimizada. Se comprueba al recuperar foco o visibilidad, que es cuando el
+  // usuario vuelve de cambiar el tema y podría ver el desajuste.
+  const recheck = () => { if (state.theme === 'auto' && !document.hidden) applyTheme(); };
+  document.addEventListener('visibilitychange', recheck);
+  window.addEventListener('focus', recheck);
 }
 
 // ───────── DRAG & DROP + CLI ARGS ─────────

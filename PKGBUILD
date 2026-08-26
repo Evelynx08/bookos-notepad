@@ -1,5 +1,5 @@
 pkgname=bookos-notepad
-pkgver=0.2.0
+pkgver=0.6.1
 pkgrel=1
 pkgdesc="Bloc de notas con pestañas, preview HTML/Markdown/URL y adblock para BookOS"
 arch=('x86_64')
