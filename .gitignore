@@ -56,3 +56,5 @@ Desktop.ini
 *.img
 core
 core.*
+
+/GPUI/target/
