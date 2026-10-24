@@ -15,7 +15,6 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 base64 = "0.22"
 futures = "0.3"
 libc = "0.2"
-adblock = { version = "0.12", default-features = false, features = ["full-regex-handling", "embedded-domain-resolver"] }
 
 [profile.release]
 lto = "fat"

@@ -22,7 +22,7 @@ pub struct Estado {
 pub struct Ajustes {
     pub font: String, pub wrap: bool, pub show_status: bool, pub file_accent: bool,
     pub zoom: u16, pub preview_mode: String, pub preview_url: String,
-    pub adblock_enabled: bool, pub youtube_no_cookie: bool, pub youtube_direct: bool,
+    pub ui_lang: String,
     pub shortcuts: HashMap<String, String>, pub restore_session: bool,
     pub session: Vec<Sesion>, pub auto_save: bool, pub auto_save_delay: u64,
     pub lista_oculta: bool,
@@ -34,8 +34,8 @@ pub struct Sesion { pub path: PathBuf, pub encoding: Option<String> }
 impl Default for Ajustes {
     fn default() -> Self { Self {
         font: "sans".into(), wrap: true, show_status: true, file_accent: true, zoom: 100,
-        preview_mode: "auto".into(), preview_url: String::new(), adblock_enabled: true,
-        youtube_no_cookie: true, youtube_direct: false, shortcuts: HashMap::new(),
+        preview_mode: "auto".into(), preview_url: String::new(), ui_lang: "auto".into(),
+        shortcuts: HashMap::new(),
         restore_session: false, session: Vec::new(), auto_save: false, auto_save_delay: 2000,
         lista_oculta: false, resto: Default::default(),
     } }
@@ -72,6 +72,19 @@ mod pruebas {
         assert_eq!(salida["previewSplit"], 0.5);
         assert_eq!(salida["settings"]["previewOpen"], true);
         assert_eq!(salida["settings"]["shortcuts"]["save"], "Alt+S");
+    }
+    #[test]
+    fn lee_state_json_de_tauri() {
+        let original=r#"{"settings":{"adblockEnabled":false,"autoSave":true,"autoSaveDelay":2000,"fileAccent":true,"font":"sans","listaOculta":false,"previewMode":"auto","previewOpen":false,"previewSplit":50.7,"previewUrl":"https://youtube.com","restoreSession":false,"session":[],"shortcuts":{},"showStatus":true,"uiLang":"es","wrap":true,"youtubeDirect":false,"youtubeNoCookie":true,"zoom":100},"theme":"auto"}"#;
+        let ruta=std::env::temp_dir().join(format!("notepad-tauri-{}.json",std::process::id()));
+        fs::write(&ruta,original).expect("temporal escribible");
+        let (persistencia,estado)=Persistencia::leer(ruta.clone());
+        assert!(persistencia.error.is_none());
+        persistencia.guardar(&estado).expect("estado compatible");
+        let salida:serde_json::Value=serde_json::from_slice(&fs::read(&ruta).expect("temporal existente")).expect("JSON guardado");
+        let entrada:serde_json::Value=serde_json::from_str(original).expect("JSON de Tauri");
+        assert_eq!(salida,entrada);
+        fs::remove_file(ruta).expect("temporal existente");
     }
     #[test]
     fn estado_roto_no_se_sobrescribe() {

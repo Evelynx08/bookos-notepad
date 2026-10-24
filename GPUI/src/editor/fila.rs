@@ -15,10 +15,11 @@ impl Element for Fila{
         if let Some(nota)=e.documento.nota(){
             if self.indice==0{tamano*=22./15.;base.weight=FontWeight::BOLD;}
             if let Some(Bloque::Texto{tramos,lista,alineacion:a,..})=nota.bloques.get(self.indice){
-                alineacion=*a;if *lista!=Lista::Ninguna{sangria=30.;}
+                alineacion= *a;if *lista!=Lista::Ninguna{sangria=30.;}
                 let mut pos=0;
                 for tramo in tramos{
-                    let crear=|len,f:&Formato|{let mut font=base.clone();if f.negrita{font.weight=FontWeight::BOLD;}if f.cursiva{font.style=FontStyle::Italic;}
+                    let crear=|len,f:&Formato|{let mut font=base.clone();if f.negrita{font.weight=FontWeight::BOLD;}
+                        if f.cursiva{font.style=FontStyle::Italic;}
                         TextRun{len,font,color:f.color.as_deref().and_then(color).unwrap_or(e.tema.tx),background_color:f.fondo.as_deref().and_then(color),underline:f.subrayado.then_some(UnderlineStyle{color:None,thickness:px(1.),wavy:false}),strikethrough:(f.tachado||*lista==Lista::Tarea(true)).then_some(StrikethroughStyle{color:None,thickness:px(1.)})}};
                     if tramo.rango.start>pos{corridas.push(crear(tramo.rango.start-pos,&Formato::default()));}corridas.push(crear(tramo.rango.len(),&tramo.formato));pos=tramo.rango.end;
                 }
@@ -52,8 +53,8 @@ impl Element for Fila{
         
         if e.seleccion.is_empty()&&e.foco.is_focused(window)&&e.cursor()>=p.inicio&&e.cursor()<=fin&&let Some(pos)=p.linea.position_for_index(e.cursor()-p.inicio,p.alto){window.paint_quad(fill(Bounds::new(origen+pos,size(px(1.5),p.alto)),e.tema.blue));}
         let foco=e.foco.clone();
-        let _=p.linea.paint_background(origen,p.alto,TextAlign::Left,None,window,cx);
-        let _=p.linea.paint(origen,p.alto,TextAlign::Left,None,window,cx);
+        if let Err(e)=p.linea.paint_background(origen,p.alto,TextAlign::Left,None,window,cx){eprintln!("bookos-notepad: no se pudo pintar el fondo del texto: {e}");}
+        if let Err(e)=p.linea.paint(origen,p.alto,TextAlign::Left,None,window,cx){eprintln!("bookos-notepad: no se pudo pintar el texto: {e}");}
         window.handle_input(&foco,ElementInputHandler::new(caja,self.editor.clone()),cx);
     }
 }
@@ -66,10 +67,10 @@ pub fn pintar(editor:Entity<Editor>,i:usize,window:&mut Window,cx:&mut App)->Any
     let bloque=editor.read(cx).documento.nota().and_then(|n|n.bloques.get(i)).cloned();
     if let Some(Bloque::Imagen{fuente,ancho,alineacion})=bloque{
         let e=editor.read(cx);let tm=e.tema;let disponible=(e.ancho-52.).max(40.);let seleccionado=e.imagen_seleccionada==Some(i);
-        let dimensiones=crate::imagenes::dimensiones(&fuente).unwrap_or((400,200));let ancho=ancho.unwrap_or(dimensiones.0 as f32).clamp(40.,disponible.min(dimensiones.0 as f32).max(40.));let alto=ancho*dimensiones.1 as f32/dimensiones.0 as f32;
-        let pixeles=(ancho*f32::from(window.scale_factor())).round()as u32;
+        let dimensiones=crate::imagenes::dimensiones(&fuente,&cx.svg_renderer()).unwrap_or((400,200));let ancho=ancho.unwrap_or(dimensiones.0 as f32).clamp(40.,disponible.min(dimensiones.0 as f32).max(40.));let alto=ancho*dimensiones.1 as f32/dimensiones.0 as f32;
+        let pixeles=(ancho*window.scale_factor()).round()as u32;
         let requiere=e.imagenes.get(&i).is_none_or(|(a,_)|*a!=pixeles);
-        if requiere {let resultado=crate::imagenes::rasterizar(&fuente,pixeles);editor.update(cx,|e,_|match resultado{Ok(imagen)=>{e.imagenes.insert(i,(pixeles,imagen));},Err(error)=>e.error_imagen=Some(error)});}
+        if requiere {let resultado=crate::imagenes::rasterizar(&fuente,pixeles,&cx.svg_renderer());editor.update(cx,|e,_|match resultado{Ok(imagen)=>{e.imagenes.insert(i,(pixeles,imagen));},Err(error)=>{eprintln!("bookos-notepad: no se pudo mostrar una imagen: {error}");e.error_imagen=Some(error)}});}
         let imagen=editor.read(cx).imagenes.get(&i).map(|(_,imagen)|imagen.clone());
         let entidad=editor.clone();let mut contenido=div().id(("imagen",i)).relative().w(px(ancho)).h(px(alto)).rounded(px(14.)).overflow_hidden().border_2().border_color(if seleccionado{tm.blue}else{gpui::transparent_black()})
             .on_mouse_down(MouseButton::Left,move|_,_,cx|{cx.stop_propagation();entidad.update(cx,|e,cx|{e.imagen_seleccionada=Some(i);cx.notify();});})
@@ -83,7 +84,7 @@ pub fn pintar(editor:Entity<Editor>,i:usize,window:&mut Window,cx:&mut App)->Any
     }else{
         let lista=match bloque{Some(Bloque::Texto{lista,..})=>lista,_=>Lista::Ninguna};
         let mut fila=div().relative().child(Fila{editor:editor.clone(),indice:i});
-        if lista!=Lista::Ninguna{let tm=editor.read(cx).tema;let entidad=editor.clone();fila=fila.child(div().id(("marcador",i)).absolute().left(px(26.)).top(px(2.)).w(px(24.)).text_color(tm.tx2).child(match lista{Lista::Vineta=>"•".into(),Lista::Numero=>format!("{}.",i),Lista::Tarea(true)=>"●".into(),Lista::Tarea(false)=>"○".into(),Lista::Ninguna=>String::new()}).on_mouse_down(MouseButton::Left,move|_,_,cx|{cx.stop_propagation();entidad.update(cx,|e,cx|e.modificar_nota(|n|{if let Bloque::Texto{lista:Lista::Tarea(hecha),..}=&mut n.bloques[i]{*hecha=!*hecha;}},cx));}));}
+        if lista!=Lista::Ninguna{let tm=editor.read(cx).tema;let entidad=editor.clone();fila=fila.child(div().id(("marcador",i)).absolute().left(px(26.)).top(px(2.)).w(px(24.)).text_color(tm.tx2).child(match lista{Lista::Vineta=>"•".into(),Lista::Numero=>format!("{}.",i),Lista::Tarea(true)=>"●".into(),Lista::Tarea(false)=>"○".into(),Lista::Ninguna=>String::new()}).on_mouse_down(MouseButton::Left,move|_,_,cx|{cx.stop_propagation();entidad.update(cx,|e,cx|e.modificar_nota(|n|{if let Bloque::Texto{lista:Lista::Tarea(hecha),..}=&mut n.bloques[i]{*hecha= !*hecha;}},cx));}));}
         fila.into_any_element()
     }
 }

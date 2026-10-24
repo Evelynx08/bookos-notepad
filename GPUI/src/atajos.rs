@@ -33,15 +33,17 @@ Accion{id:"zoom-reset",seccion:"Zoom",etiqueta:"Tamaño 100%",tecla:"Ctrl+0"},
 ];
 pub fn combinacion(e:&KeyDownEvent)->String {
     let k=&e.keystroke;let mut partes=Vec::new();
-    if k.modifiers.control||k.modifiers.platform{partes.push("Ctrl".into());}if k.modifiers.alt{partes.push("Alt".into());}if k.modifiers.shift{partes.push("Shift".into());}
+    if k.modifiers.control||k.modifiers.platform{partes.push("Ctrl".into());}
+    if k.modifiers.alt{partes.push("Alt".into());}
+    if k.modifiers.shift{partes.push("Shift".into());}
     let key=match k.key.as_str(){"up"=>"ArrowUp","down"=>"ArrowDown","left"=>"ArrowLeft","right"=>"ArrowRight","space"|" "=>"Space","enter"=>"Enter","escape"=>"Escape","backspace"=>"Backspace","tab"=>"Tab",s=>s};
     partes.push(if key.len()==1{key.to_uppercase()}else{key.into()});partes.join("+")
 }
 fn canonica(s:&str)->String{
-    let (modificadores,tecla)=if s.ends_with("++"){(&s[..s.len()-2],"+")}else{s.rsplit_once('+').unwrap_or(("",s))};
+    let (modificadores,tecla)=if let Some(modificadores)=s.strip_suffix("++"){(modificadores,"+")}else{s.rsplit_once('+').unwrap_or(("",s))};
     let mut mods=modificadores.split('+').filter(|s|!s.is_empty()).map(|s|s.trim().to_lowercase()).collect::<Vec<_>>();mods.sort_unstable();format!("{}:{}",mods.join("+"),tecla.to_lowercase())
 }
 pub fn coincide(a:&str,b:&str)->bool{!a.is_empty()&&canonica(a)==canonica(b)}
 pub fn tecla<'a>(a:&'a Accion,personalizados:&'a HashMap<String,String>)->&'a str{personalizados.get(a.id).map_or(a.tecla,String::as_str)}
-pub fn conflicto<'a>(id:&str,combo:&str,personalizados:&'a HashMap<String,String>)->Option<&'static str>{ACCIONES.iter().find(|a|a.id!=id&&coincide(tecla(a,personalizados),combo)).map(|a|a.id)}
+pub fn conflicto(id:&str,combo:&str,personalizados:&HashMap<String,String>)->Option<&'static str>{ACCIONES.iter().find(|a|a.id!=id&&coincide(tecla(a,personalizados),combo)).map(|a|a.id)}
 #[cfg(test)]mod pruebas {use super::*;#[test]fn modificadores_orden_mayusculas_y_mas(){assert!(coincide("Ctrl+Shift+S","shift+ctrl+s"));assert!(coincide("Ctrl++","ctrl++"));assert!(!coincide("",""));}#[test]fn personalizacion_desactivacion_y_conflictos(){let mut p=HashMap::new();p.insert("save".into(),"Alt+S".into());p.insert("open-file".into(),String::new());assert_eq!(tecla(&ACCIONES[3],&p),"Alt+S");assert_eq!(conflicto("new-tab","Alt+S",&p),Some("save"));assert_eq!(tecla(&ACCIONES[2],&p),"");}}

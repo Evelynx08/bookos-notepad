@@ -33,7 +33,7 @@ fn decodificar(mut bytes: Vec<u8>, forzada: Option<&str>) -> Result<(String, Str
         "utf-16le" | "utf-16be" => {
             let datos = if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) { &bytes[2..] } else { &bytes };
             if datos.len() % 2 != 0 { return Err("UTF-16 con un byte incompleto".into()); }
-            let unidades = datos.chunks_exact(2).map(|c| if codificacion == "utf-16le" { u16::from_le_bytes([c[0],c[1]]) } else { u16::from_be_bytes([c[0],c[1]]) });
+            let unidades = datos.as_chunks::<2>().0.iter().map(|c| if codificacion == "utf-16le" { u16::from_le_bytes([c[0],c[1]]) } else { u16::from_be_bytes([c[0],c[1]]) });
             char::decode_utf16(unidades).collect::<Result<String, _>>().map_err(|e| e.to_string())?
         }
         "latin-1" => bytes.into_iter().map(char::from).collect(),
@@ -78,7 +78,7 @@ pub fn escribir_bytes(ruta: &Path, bytes: &[u8]) -> Result<SystemTime, String> {
         fs::File::open(padre)?.sync_all()?;
         fs::metadata(ruta)?.modified()
     })();
-    if resultado.is_err() { let _ = fs::remove_file(&temporal); }
+    if resultado.is_err()&&let Err(e)=fs::remove_file(&temporal)&&e.kind()!=std::io::ErrorKind::NotFound { eprintln!("bookos-notepad: no se pudo limpiar {}: {e}",temporal.display()); }
     resultado.map_err(|e| format!("{}: {e}", ruta.display()))
 }
 pub fn elegir(modo: &str, nombre: Option<&Path>, imagenes: bool) -> Result<Vec<PathBuf>, String> {
@@ -93,7 +93,7 @@ pub fn elegir(modo: &str, nombre: Option<&Path>, imagenes: bool) -> Result<Vec<P
     }
     let estado = orden.status().map_err(|e| format!("No se pudo abrir bookos-explorer: {e}"))?;
     let rutas = match fs::read_to_string(&salida) { Ok(s) => s.lines().map(PathBuf::from).collect(), Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(), Err(e) => return Err(e.to_string()) };
-    let _ = fs::remove_file(salida);
+    if let Err(e)=fs::remove_file(&salida)&&e.kind()!=std::io::ErrorKind::NotFound { eprintln!("bookos-notepad: no se pudo limpiar {}: {e}",salida.display()); }
     if !estado.success() { return Err("El selector de archivos terminó con error".into()); }
     Ok(rutas)
 }

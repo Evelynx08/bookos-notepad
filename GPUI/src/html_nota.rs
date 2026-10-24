@@ -6,7 +6,7 @@ fn entidades(s:&str)->String {
     RE.get_or_init(||Regex::new(r"&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);").expect("regex fija válida"))
         .replace_all(s,|c:&regex::Captures<'_>|match &c[1] {
             "amp"=>"&".into(),"lt"=>"<".into(),"gt"=>">".into(),"quot"=>"\"".into(),"apos"=>"'".into(),"nbsp"=>"\u{a0}".into(),
-            n if n.starts_with('#')=>{let valor=if n.starts_with("#x"){u32::from_str_radix(&n[2..],16).ok()}else{n[1..].parse().ok()};valor.and_then(char::from_u32).map_or_else(||c[0].into(),|v|v.to_string())},
+            n if n.starts_with('#')=>{let valor=if let Some(hex)=n.strip_prefix("#x"){u32::from_str_radix(hex,16).ok()}else{n[1..].parse().ok()};valor.and_then(char::from_u32).map_or_else(||c[0].into(),|v|v.to_string())},
             _=>c[0].into(),
         }).into_owned()
 }
@@ -27,7 +27,7 @@ pub fn leer(html:&str)->Nota {
         if html.as_bytes()[cursor]!=b'<' {
             let fin=html[cursor..].find('<').map_or(html.len(),|i|cursor+i);
             let texto=entidades(&html[cursor..fin]);
-            if oculto==0 && !(cerrado && texto.trim().is_empty()) {if let Bloque::Texto{texto:contenido,tramos,..}=&mut actual {let a=contenido.len();contenido.push_str(&texto);if a<contenido.len(){tramos.push(Tramo{rango:a..contenido.len(),formato:formato.clone()});} cerrado=false;}}
+            if oculto==0 && !(cerrado && texto.trim().is_empty()) && let Bloque::Texto{texto:contenido,tramos,..}=&mut actual {let a=contenido.len();contenido.push_str(&texto);if a<contenido.len(){tramos.push(Tramo{rango:a..contenido.len(),formato:formato.clone()});} cerrado=false;}
             cursor=fin;continue;
         }
         if html[cursor..].starts_with("<!--") {cursor=html[cursor+4..].find("-->").map_or(html.len(),|i|cursor+4+i+3);continue;}
@@ -98,9 +98,12 @@ pub fn escribir(nota:&Nota)->String {
                 for t in tramos {
                     if t.rango.start>cursor{salida.push_str(&escapar(&texto[cursor..t.rango.start]));}
                     let f=&t.formato;let mut estilos=String::new();
-                    if f.negrita{estilos.push_str("font-weight:bold;");}if f.cursiva{estilos.push_str("font-style:italic;");}
-                    if f.subrayado||f.tachado{estilos.push_str("text-decoration:");if f.subrayado{estilos.push_str("underline ");}if f.tachado{estilos.push_str("line-through");}estilos.push(';');}
-                    if let Some(c)=&f.color{estilos.push_str(&format!("color:{};",escapar(c)));}if let Some(c)=&f.fondo{estilos.push_str(&format!("background-color:{};",escapar(c)));}
+                    if f.negrita{estilos.push_str("font-weight:bold;");}
+                    if f.cursiva{estilos.push_str("font-style:italic;");}
+                    if f.subrayado||f.tachado{estilos.push_str("text-decoration:");if f.subrayado{estilos.push_str("underline ");}
+                        if f.tachado{estilos.push_str("line-through");}estilos.push(';');}
+                    if let Some(c)=&f.color{estilos.push_str(&format!("color:{};",escapar(c)));}
+                    if let Some(c)=&f.fondo{estilos.push_str(&format!("background-color:{};",escapar(c)));}
                     salida.push_str(&format!("<span style=\"{estilos}\">{}</span>",escapar(&texto[t.rango.clone()])));cursor=t.rango.end;
                 }
                 salida.push_str(&escapar(&texto[cursor..]));if texto.is_empty(){salida.push_str("<br>");}salida.push_str(cerrar);
@@ -124,7 +127,7 @@ mod pruebas {
     }
     #[test]
     fn editar_conserva_formato_fuera_de_la_seleccion() {
-        let mut nota=leer("<div>Título</div><div><b>hola</b> mundo</div>");nota.reemplazar(8..9,"X",&Formato::default());
+        let mut nota=leer("<div>Título</div><div><b>hola</b> mundo</div>");nota.reemplazar(9..10,"X",&Formato::default());
         assert_eq!(nota.plano(),"Título\nhXla mundo");assert_eq!(leer(&escribir(&nota)),nota);
     }
 }
