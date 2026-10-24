@@ -251,6 +251,157 @@ fn write_file(
     Ok(mtime)
 }
 
+/// Carpeta de las notas. Cada nota es un `.html` suelto y no una entrada de un
+/// índice único: así guardar una no reescribe las demás, y un fallo a medio
+/// escribir estropea como mucho esa nota.
+fn carpeta_notas() -> Result<PathBuf, String> {
+    let carpeta = dirs::data_dir()
+        .ok_or("no hay carpeta de datos del usuario")?
+        .join("bookos-notepad/notas");
+    fs::create_dir_all(&carpeta).map_err(|e| format!("{}: {}", carpeta.display(), e))?;
+    Ok(carpeta)
+}
+
+#[derive(serde::Serialize)]
+struct Nota {
+    ruta: String,
+    html: String,
+    mtime: f64,
+}
+
+#[derive(serde::Serialize)]
+struct Notas {
+    carpeta: String,
+    notas: Vec<Nota>,
+}
+
+/// Todas las notas con su contenido, en una sola llamada: la lista necesita el
+/// título y el extracto de cada una, que salen del propio texto.
+#[tauri::command]
+fn notas_listar() -> Result<Notas, String> {
+    let carpeta = carpeta_notas()?;
+    let notas = fs::read_dir(&carpeta)
+        .map_err(|e| format!("{}: {}", carpeta.display(), e))?
+        .filter_map(Result::ok)
+        .map(|entrada| entrada.path())
+        .filter(|ruta| ruta.extension().is_some_and(|ext| ext == "html"))
+        .map(|ruta| {
+            let bytes = fs::read(&ruta).map_err(|e| format!("{}: {}", ruta.display(), e))?;
+            let meta = fs::metadata(&ruta).map_err(|e| format!("{}: {}", ruta.display(), e))?;
+            Ok(Nota {
+                ruta: ruta.to_string_lossy().into_owned(),
+                // Con pérdida y no `read_to_string`: una nota con bytes rotos
+                // se abre con «�» en vez de dejar la lista entera sin cargar.
+                html: String::from_utf8_lossy(&bytes).into_owned(),
+                mtime: mtime_secs(&meta),
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(Notas { carpeta: carpeta.to_string_lossy().into_owned(), notas })
+}
+
+/// Borra una nota. La ruta viene del frontend, así que solo se acepta si cae
+/// directamente dentro de la carpeta de notas.
+#[tauri::command]
+fn nota_borrar(ruta: String) -> Result<(), String> {
+    let ruta = PathBuf::from(ruta);
+    if ruta.parent() != Some(carpeta_notas()?.as_path()) {
+        return Err(format!("{} no es una nota", ruta.display()));
+    }
+    fs::remove_file(&ruta).map_err(|e| format!("{}: {}", ruta.display(), e))
+}
+
+/// Los bytes de una imagen, para insertarla en una nota. Respuesta binaria y no
+/// `Vec<u8>`: serializado como JSON viaja como una lista de números decimales.
+#[tauri::command]
+fn leer_imagen(ruta: String) -> Result<tauri::ipc::Response, String> {
+    fs::read(&ruta)
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| format!("{}: {}", ruta, e))
+}
+
+// ── Vista previa ─────────────────────────────────────────────────────────
+// Una ventana hija de la principal, al estilo de Quick Look. El editor manda el
+// documento con `vista_previa`; la ventana lo recibe por evento si ya existe, y
+// si se está creando lo pide ella con `vista_previa_doc` al terminar de cargar:
+// el evento habría salido antes de que hubiera nadie escuchando.
+
+const VISTA_PREVIA: &str = "vista-previa";
+
+/// El último documento enviado a la vista previa.
+#[derive(Default)]
+struct VistaPrevia(std::sync::Mutex<Option<serde_json::Value>>);
+
+// `async` para que la ventana no se cree en el hilo principal desde un comando
+// síncrono, que es donde la documentación de Tauri avisa de bloqueos.
+#[tauri::command]
+async fn vista_previa(
+    app: tauri::AppHandle,
+    estado: tauri::State<'_, VistaPrevia>,
+    doc: serde_json::Value,
+) -> Result<(), String> {
+    use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+    let existe = app.get_webview_window(VISTA_PREVIA).is_some();
+    if existe {
+        app.emit("vista-previa-doc", &doc).map_err(|e| e.to_string())?;
+    }
+    *estado.0.lock().map_err(|e| e.to_string())? = Some(doc);
+    if existe {
+        return Ok(());
+    }
+    let principal = app.get_webview_window("main").ok_or("no hay ventana principal")?;
+    let ventana = WebviewWindowBuilder::new(&app, VISTA_PREVIA, WebviewUrl::App("preview.html".into()))
+        .title("Vista previa")
+        .inner_size(760.0, 560.0)
+        .min_inner_size(440.0, 320.0)
+        .decorations(false)
+        .transparent(true)
+        .parent(&principal)
+        .map_err(|e| e.to_string())?
+        .initialization_script(include_str!("../tauri-api.js"))
+        .initialization_script(include_str!("../tauri-bridge.js"))
+        .build()
+        .map_err(|e| e.to_string())?;
+    // También se cierra desde el escritorio, sin pasar por su botón: el editor
+    // tiene que enterarse para apagar el suyo y dejar de mandar el documento.
+    ventana.on_window_event(move |evento| {
+        if matches!(evento, tauri::WindowEvent::Destroyed) {
+            let _ = app.emit("vista-previa-cerrada", ());
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn vista_previa_doc(estado: tauri::State<'_, VistaPrevia>) -> Result<Option<serde_json::Value>, String> {
+    // Se clona: la copia guardada sirve también si la ventana se recarga.
+    Ok(estado.0.lock().map_err(|e| e.to_string())?.clone())
+}
+
+#[tauri::command]
+fn vista_previa_cerrar(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    match app.get_webview_window(VISTA_PREVIA) {
+        Some(ventana) => ventana.close().map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+/// La vista previa pide al editor el documento tal como está ahora.
+#[tauri::command]
+fn vista_previa_pedir(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
+    app.emit("vista-previa-pide", ()).map_err(|e| e.to_string())
+}
+
+/// Un ajuste cambiado en la vista previa vuelve al editor, que es el único que
+/// escribe state.json.
+#[tauri::command]
+fn vista_previa_ajuste(app: tauri::AppHandle, clave: String, valor: serde_json::Value) -> Result<(), String> {
+    use tauri::Emitter;
+    app.emit("vista-previa-ajuste", (clave, valor)).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn open_url_external(url: String) -> Result<(), String> {
     Command::new("xdg-open")
@@ -369,6 +520,108 @@ fn desactivar_zoom_por_pellizco<R: tauri::Runtime>(
     });
 }
 
+/// Qué quiere elegir el frontend. Cada campo es una bandera `--pick-*` de
+/// `bookos-explorer`.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Eleccion {
+    modo: ModoEleccion,
+    #[serde(default)]
+    multiple: bool,
+    #[serde(default)]
+    patrones: Vec<String>,
+    nombre_filtro: Option<String>,
+    titulo: Option<String>,
+    nombre: Option<String>,
+    inicio: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ModoEleccion {
+    Open,
+    Save,
+    Folder,
+}
+
+/// Selector de archivos del sistema: `bookos-explorer` en modo portal
+/// (AI-DESIGN-SYSTEM §9), nunca el diálogo de GTK. `None` es que el usuario
+/// canceló. Sin el explorador instalado devuelve el error `sin-explorador` y
+/// el frontend cae al diálogo de Tauri.
+#[tauri::command]
+async fn elegir_ruta(eleccion: Eleccion) -> Result<Option<Vec<String>>, String> {
+    let salida = std::env::temp_dir().join(format!(
+        "{}-pick-{}-{}.txt",
+        env!("CARGO_PKG_NAME"),
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_nanos()
+    ));
+    let mut orden = std::process::Command::new("bookos-explorer");
+    orden.arg("--bookos-portal").arg(&salida).arg("--pick-mode").arg(match eleccion.modo {
+        ModoEleccion::Open => "open",
+        ModoEleccion::Save => "save",
+        ModoEleccion::Folder => "folder",
+    });
+    if eleccion.multiple {
+        orden.arg("--pick-multiple");
+    }
+    for patron in &eleccion.patrones {
+        orden.arg("--pick-pattern").arg(patron);
+    }
+    for (bandera, valor) in [
+        ("--pick-filter-name", &eleccion.nombre_filtro),
+        ("--pick-title", &eleccion.titulo),
+        ("--pick-name", &eleccion.nombre),
+        ("--pick-start", &eleccion.inicio),
+    ] {
+        if let Some(valor) = valor {
+            orden.arg(bandera).arg(valor);
+        }
+    }
+    let mut hijo = match orden.spawn() {
+        Ok(hijo) => hijo,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err("sin-explorador".into()),
+        Err(e) => return Err(e.to_string()),
+    };
+    // Se espera a que el explorador salga y solo entonces se lee: escribe el
+    // fichero justo antes de `exit`, y leerlo en cuanto aparece (lo que hace
+    // el Viewer) puede pillarlo vacío y tomarlo por una cancelación. Es lo
+    // mismo que hace el portal del compositor.
+    tauri::async_runtime::spawn_blocking(move || {
+        let fin = hijo.wait();
+        let texto = std::fs::read_to_string(&salida);
+        // Sin fichero es que se canceló: no hay nada que borrar.
+        let _ = std::fs::remove_file(&salida);
+        fin.map_err(|e| e.to_string())?;
+        let rutas: Vec<String> = texto.unwrap_or_default().lines().map(str::to_owned).collect();
+        Ok((!rutas.is_empty()).then_some(rutas))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn bookos_language() -> String {
+    let locale = std::env::var("LANG").unwrap_or_else(|_| "en".into());
+    let Some(home) = std::env::var_os("HOME") else {
+        return if locale.to_lowercase().starts_with("es") { "es" } else { "en" }.into();
+    };
+    let path = std::path::PathBuf::from(home).join(".config/bookos/settings.json");
+    let language = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+        .and_then(|settings| settings.get("AppLanguage").and_then(|value| value.as_str()).map(str::to_owned));
+    match language.as_deref() {
+        Some("es") => "es".into(),
+        Some("en") => "en".into(),
+        _ if locale.to_lowercase().starts_with("es") => "es".into(),
+        _ => "en".into(),
+    }
+}
+
 fn main() {
     // Force dark GTK theme for native dialogs (open/save file pickers).
     // The webkit2gtk file chooser inherits the GTK theme; without this it
@@ -399,14 +652,25 @@ fn main() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(VistaPrevia::default())
         .invoke_handler(tauri::generate_handler![
+            elegir_ruta,
             bookos_palette_css,
             load_state,
             save_state,
+            bookos_language,
             detect_system_theme,
             read_file,
             write_file,
             file_meta,
+            notas_listar,
+            nota_borrar,
+            leer_imagen,
+            vista_previa,
+            vista_previa_doc,
+            vista_previa_cerrar,
+            vista_previa_pedir,
+            vista_previa_ajuste,
             open_url_external,
             play_in_mpv,
             check_player_available,
@@ -422,7 +686,9 @@ fn main() {
             use tauri::{WebviewWindowBuilder, WebviewUrl};
             let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("Bloc de notas")
-                .inner_size(900.0, 640.0)
+                // Con la lista de notas a la izquierda (306px), a 900 de ancho
+                // la barra de formato de un archivo (~677px) no cabía en una fila.
+                .inner_size(1040.0, 680.0)
                 .min_inner_size(560.0, 400.0)
                 .decorations(false)
                 .transparent(true)
@@ -434,6 +700,17 @@ fn main() {
 
             // CLI files are delivered via the `take_cli_files` command the
             // frontend pulls on boot — no fragile fire-once emit/race here.
+            // Sin la principal la vista previa no pinta nada, y viva mantendría
+            // el proceso abierto.
+            let app = app.handle().clone();
+            win.on_window_event(move |evento| {
+                if matches!(evento, tauri::WindowEvent::Destroyed) {
+                    use tauri::Manager;
+                    if let Some(vista) = app.get_webview_window(VISTA_PREVIA) {
+                        let _ = vista.close();
+                    }
+                }
+            });
             let _ = win.show();
             Ok(())
         })

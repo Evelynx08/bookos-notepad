@@ -1,8 +1,48 @@
 // BookOS Notepad — frontend
+
+// El idioma y el tema se eligen en Ajustes de BookOS, no por ventana.
+for (const id of ["theme-btn", "lang-btn"]) {
+  const control = document.getElementById(id);
+  if (control) control.hidden = true;
+}
+for (const id of ["ui-lang", "seg-theme"]) {
+  const control = document.getElementById(id);
+  control?.closest(".detail-item")?.remove();
+}
+const selectorTema = document.getElementById("themePicker")?.closest(".settings-row");
+if (selectorTema) selectorTema.hidden = true;
+
 const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
 const tauriWin = () => window.__TAURI__.window.getCurrentWindow();
-const dialog = () => window.__TAURI__.dialog;
 const $ = (s, r=document) => r.querySelector(s);
+
+// Selector de archivos: el explorador de BookOS (AI-DESIGN-SYSTEM §9). Toma las
+// opciones de `dialog.open/save` de Tauri para que, si el explorador no está
+// instalado, pasen tal cual al diálogo de siempre.
+async function elegirRuta(modo, opciones = {}) {
+  const filtros = opciones.filters || [];
+  const exts = filtros.flatMap(f => f.extensions);
+  // Un filtro «*» es «todo»; el explorador solo aplica uno, la unión del resto.
+  const patrones = exts.includes('*') ? [] : exts.map(e => '*.' + e);
+  const ruta = opciones.defaultPath || '';
+  const corte = ruta.lastIndexOf('/');
+  try {
+    const rutas = await window.__TAURI__.core.invoke('elegir_ruta', { eleccion: {
+      modo: opciones.directory ? 'folder' : modo,
+      multiple: !!opciones.multiple,
+      patrones,
+      nombreFiltro: filtros.length === 1 ? filtros[0].name : undefined,
+      titulo: opciones.title,
+      nombre: modo === 'save' && ruta ? ruta.slice(corte + 1) : undefined,
+      inicio: corte > 0 ? ruta.slice(0, corte) : undefined,
+    } });
+    if (!rutas) return null;
+    return opciones.multiple ? rutas : rutas[0];
+  } catch (e) {
+    if (e !== 'sin-explorador') throw e;
+    return window.__TAURI__.dialog[modo](opciones);
+  }
+}
 
 const EXT_MAP = {
   // shell
@@ -63,19 +103,18 @@ const DEFAULT_SETTINGS = {
   showStatus: true,
   fileAccent: true,
   zoom: 100,           // percent
-  previewOpen: false,
   previewMode: 'auto', // auto|html|md|url
-  previewSplit: 50,    // editor pane % width
   previewUrl: '',
   adblockEnabled: true,
   youtubeNoCookie: true,
   youtubeDirect: false,     // try youtube.com/watch directly (skip /embed/)
   shortcuts: {},            // user overrides: { actionId: "Ctrl+Alt+B" }
   uiLang: 'auto',
-  restoreSession: true,     // reopen tabs on launch
+  restoreSession: false,    // reopen tabs on launch
   session: [],              // [{path, encoding}] persisted tabs with on-disk path
   autoSave: false,          // auto-save tabs that have an on-disk path
-  autoSaveDelay: 2000       // debounce ms after last edit
+  autoSaveDelay: 2000,      // debounce ms after last edit
+  listaOculta: false        // lista de notas plegada
 };
 
 let state = { theme:'auto', settings:{...DEFAULT_SETTINGS} };
@@ -91,9 +130,10 @@ let fsHotzone = null;
 async function loadState() {
   try { state = await invoke('load_state'); }
   catch { state = { theme:'auto' }; }
-  if (!state.theme) state.theme = 'auto';
+  state.theme = 'auto';
   state.settings = { ...DEFAULT_SETTINGS, ...(state.settings||{}) };
-  if (window.BookosI18n) BookosI18n.setLang(state.settings.uiLang || 'auto');
+  state.settings.uiLang = await invoke('bookos_language').catch(() => 'es');
+  if (window.BookosI18n) BookosI18n.setLang(state.settings.uiLang);
 }
 async function saveState() { try { await invoke('save_state', { state }); } catch(e){console.error(e);} }
 
@@ -106,7 +146,7 @@ function saveSessionDebounced(){
 function saveSession(){
   if (!state.settings.restoreSession) return;
   state.settings.session = tabs
-    .filter(t => t.path)               // only persisted files
+    .filter(t => t.path && !t.nota)    // only persisted files
     .map(t => ({ path: t.path, encoding: t.encoding || 'utf-8' }));
   saveState();
 }
@@ -264,13 +304,16 @@ function getTab(id) { return tabs.find(t => t.id === id); }
 
 function setActive(id) {
   if (id === activeId) return;
+  quitarMarcoImagen();
   // Persist current editor content into its tab before switching
   saveActiveContent();
+  const anterior = getTab(activeId);
+  if (anterior?.nota) soltarNota(anterior);
   prevId = activeId;
   activeId = id;
   renderEditor();
   renderTabs();
-  if (state.settings.previewOpen) renderPreview();
+  enviarVistaPrevia();
 }
 
 function saveActiveContent() {
@@ -280,23 +323,100 @@ function saveActiveContent() {
   // Strip find highlights so injected <mark> never persists into saved content.
   if (typeof clearHighlights === 'function') clearHighlights();
   const ed = $('.editor-area');
-  if (ed) t.content = ed.innerHTML;
+  if (ed) {
+    t.content = ed.innerHTML;
+    if (t.nota && currentPage === 'editor') guardarVistaNota(t, ed);
+  }
+}
+
+function guardarVistaNota(t, ed) {
+  const sel = window.getSelection();
+  const indiceHTML = (padre, hasta) => {
+    let indice = 0, anteriorTexto = false;
+    for (const hijo of padre.childNodes) {
+      const texto = hijo.nodeType === 3;
+      if (hijo === hasta) return indice - (texto && anteriorTexto ? 1 : 0);
+      if (!texto || !anteriorTexto) indice++;
+      anteriorTexto = texto;
+    }
+    return indice;
+  };
+  const punto = (nodo, offset) => {
+    const rango = document.createRange();
+    rango.selectNodeContents(ed);
+    rango.setEnd(nodo, offset);
+    const texto = rango.toString().length;
+    if (nodo.nodeType !== 3) {
+      const hijo = nodo.childNodes[offset];
+      if (hijo?.nodeType === 3 && hijo.previousSibling?.nodeType === 3) {
+        nodo = hijo;
+        offset = 0;
+      } else offset = indiceHTML(nodo, hijo);
+    }
+    // innerHTML une los textos contiguos. Se guarda su posición en ese
+    // árbol serializado, incluidas las líneas vacías y los límites de imagen.
+    while (nodo.nodeType === 3 && nodo.previousSibling?.nodeType === 3) {
+      nodo = nodo.previousSibling;
+      offset += nodo.length;
+    }
+    const camino = [];
+    while (nodo !== ed) {
+      camino.unshift(indiceHTML(nodo.parentNode, nodo));
+      nodo = nodo.parentNode;
+    }
+    return { camino, offset, texto };
+  };
+  const seleccion = ed.contains(sel.anchorNode) && ed.contains(sel.focusNode)
+    ? { inicio: punto(sel.anchorNode, sel.anchorOffset), fin: punto(sel.focusNode, sel.focusOffset) }
+    : t.vista?.seleccion;
+  t.vista = { arriba: ed.scrollTop, izquierda: ed.scrollLeft, seleccion };
+}
+
+function restaurarVistaNota(t, ed) {
+  const vista = t.vista;
+  if (!vista) return;
+  const nodo = (punto) => punto.camino.reduce((padre, indice) => padre?.childNodes[indice], ed);
+  if (vista.seleccion) {
+    const { inicio, fin } = vista.seleccion;
+    const a = nodo(inicio), b = nodo(fin);
+    // La serialización puede unir nodos de texto contiguos: no se reutilizan
+    // posiciones que ya no existen en el HTML reconstruido.
+    if (a && b && inicio.offset <= (a.nodeType === 3 ? a.length : a.childNodes.length)
+      && fin.offset <= (b.nodeType === 3 ? b.length : b.childNodes.length)) {
+      window.getSelection().setBaseAndExtent(a, inicio.offset, b, fin.offset);
+    } else restoreCaretOffset(ed, fin.texto);
+  }
+  let interactuando = false;
+  for (const evento of ['pointerdown', 'wheel', 'keydown']) {
+    ed.addEventListener(evento, () => { interactuando = true; }, { once: true, passive: true });
+  }
+  const desplazar = () => {
+    if (interactuando || !ed.isConnected || activeId !== t.id) return;
+    ed.scrollTop = vista.arriba;
+    ed.scrollLeft = vista.izquierda;
+  };
+  desplazar();
+  for (const img of ed.querySelectorAll('img')) {
+    if (!img.complete) img.addEventListener('load', desplazar, { once: true });
+  }
 }
 
 function closeTab(id) {
   const t = getTab(id);
-  if (!t) return;
+  // Una nota no se cierra: se deja de mirar al elegir otra, o se elimina.
+  if (!t || t.nota) return;
   if (t.dirty) {
     const ok = confirm(`"${t.name}" tiene cambios sin guardar. ¿Cerrar de todos modos?`);
     if (!ok) return;
   }
-  const idx = tabs.indexOf(t);
-  tabs.splice(idx, 1);
+  const pos = tabs.filter(x => !x.nota).indexOf(t);
+  tabs.splice(tabs.indexOf(t), 1);
   if (activeId === id) {
     activeId = null;
-    const next = tabs[idx] || tabs[idx-1];
+    const archivos = tabs.filter(x => !x.nota);
+    const next = archivos[pos] || archivos[pos-1] || notas()[0];
     if (next) setActive(next.id);
-    else { newTab(); return; }
+    else { nuevaNota(); return; }
   }
   if (prevId === id) prevId = null;
   renderTabs();
@@ -306,9 +426,7 @@ function closeTab(id) {
 function renderTabs() {
   const row = $('#tabs-row');
   row.innerHTML = '';
-  // #5 hide tabs row when only 1 tab
-  row.classList.toggle('single-tab', tabs.length < 2);
-  for (const t of tabs) {
+  for (const t of tabs.filter(t => !t.nota)) {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === activeId ? ' active' : '') + (t.dirty ? ' dirty' : '');
     el.dataset.id = t.id;
@@ -316,7 +434,7 @@ function renderTabs() {
     el.innerHTML = `
       <span class="tab-dot"></span>
       <span class="tab-name">${escapeHtml(t.name)}</span>
-      <button class="tab-close" title="Cerrar" aria-label="Cerrar pestaña">×</button>`;
+      <button class="tab-close" title="Cerrar" aria-label="Cerrar pestaña"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
     el.addEventListener('mousedown', (e) => {
       if (e.button === 1) { e.preventDefault(); closeTab(t.id); return; }
       if (e.target.closest('.tab-close')) return;
@@ -328,6 +446,7 @@ function renderTabs() {
     });
     row.appendChild(el);
   }
+  pintarLista();
   updateTitle();
 }
 
@@ -339,31 +458,53 @@ function updateTitle() {
   const t = activeTab();
   const title = t ? (t.dirty ? '● ' : '') + t.name + ' — Bloc de notas' : 'Bloc de notas';
   try { tauriWin().setTitle(title); } catch {}
-  $('#tb-title').textContent = t ? t.name : 'Bloc de notas';
+  $('#tb-title').textContent = currentPage === 'settings' ? tr('settings')
+    : !t ? tr('app.title') : t.nota ? tr('notas.titulo') : t.name;
 }
 
 function activeTab() { return getTab(activeId); }
 
 // ───────── EDITOR ─────────
 function renderEditor() {
+  quitarMarcoImagen();
   const host = $('#editor-host');
   host.innerHTML = '';
   const t = activeTab();
   if (!t) return;
-  // Apply ext accent
   host.className = 'editor-host';
-  if (state.settings.fileAccent) host.classList.add('ext-' + t.ext);
+  $('#mc').classList.toggle('modo-nota', !!t.nota);
+  if (t.nota) {
+    const cabecera = document.createElement('div');
+    cabecera.className = 'nota-cabecera';
+    const fecha = document.createElement('div');
+    fecha.className = 'nota-fecha';
+    fecha.textContent = fechaLarga(t.mtime);
+    const estado = document.createElement('span');
+    estado.className = 'nota-estado';
+    estado.setAttribute('role', 'status');
+    estado.setAttribute('aria-live', 'polite');
+    const guardado = document.createElement('button');
+    guardado.className = 'nota-guardado';
+    guardado.type = 'button';
+    guardado.addEventListener('click', () => guardarNota(t));
+    estado.appendChild(guardado);
+    cabecera.append(fecha, estado);
+    host.appendChild(cabecera);
+  } else {
+    // Apply ext accent
+    if (state.settings.fileAccent) host.classList.add('ext-' + t.ext);
 
-  const badge = document.createElement('div');
-  badge.className = 'ext-badge ext-' + t.ext;
-  badge.textContent = labelForExt(t.rawExt, t.ext);
-  host.appendChild(badge);
+    const badge = document.createElement('div');
+    badge.className = 'ext-badge ext-' + t.ext;
+    badge.textContent = labelForExt(t.rawExt, t.ext);
+    host.appendChild(badge);
+  }
 
   const area = document.createElement('div');
-  area.className = 'editor-area font-' + state.settings.font + ' ' + (state.settings.wrap ? 'wrap' : 'nowrap');
+  area.className = 'editor-area font-' + state.settings.font + ' ' + (t.nota ? 'nota wrap' : state.settings.wrap ? 'wrap' : 'nowrap');
   area.contentEditable = 'true';
   area.spellcheck = false;
-  area.dataset.placeholder = 'Empieza a escribir…';
+  area.dataset.placeholder = t.nota ? tr('notas.nueva') : 'Empieza a escribir…';
   area.style.fontSize = (15 * state.settings.zoom / 100) + 'px';
   area.innerHTML = t.content || '';
   area.addEventListener('input', onEditorInput);
@@ -371,8 +512,21 @@ function renderEditor() {
   area.addEventListener('keydown', onEditorKeydown);
   area.addEventListener('keyup', scheduleCaretStatus);
   area.addEventListener('click', scheduleCaretStatus);
+  area.addEventListener('paste', pegarImagen);
+  if (t.nota) area.addEventListener('click', alternarTarea);
+  area.addEventListener('click', seleccionarImagen);
+  area.addEventListener('scroll', () => marcoImagen?.colocar());
+  area.addEventListener('keydown', (e) => {
+    if (!['Tab', 'Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) quitarMarcoImagen();
+  });
   host.appendChild(area);
-  area.focus();
+  area.focus({ preventScroll: true });
+  if (t.nota) {
+    asegurarTitulo(area);
+    area.classList.toggle('vacia', notaVacia(t));
+    restaurarVistaNota(t, area);
+    actualizarGuardado(t);
+  }
   updateStatus();
 }
 
@@ -388,401 +542,77 @@ function scheduleStatus() {
   }, 100);
 }
 
-function onEditorInput() {
+function onEditorInput(e) {
+  if (marcoImagen && !marcoImagen.img.isConnected) quitarMarcoImagen();
   const t = activeTab();
   if (!t) return;
+  if (t.nota) { notaEditada(t, e); scheduleStatus(); return; }
   if (!t.dirty) { t.dirty = true; renderTabs(); }
   scheduleStatus();
   schedulePreview();
   scheduleAutoSave();
 }
 
-// ───────── PREVIEW ─────────
+// ───────── VISTA PREVIA ─────────
+// Vive en una ventana hija (preview.html), al estilo de Quick Look: aquí solo
+// se le manda el documento. Los ajustes siguen teniendo un único dueño, esta
+// ventana: la vista previa los recibe con cada envío y devuelve sus cambios
+// por `vista-previa-ajuste`, en vez de escribir ella también en state.json.
+let vistaAbierta = false;
 let previewTimer = null;
-let previewToken = 0;        // increments each render — async callbacks check before mount
+
+async function enviarVistaPrevia() {
+  const t = activeTab();
+  if (!vistaAbierta || !t || t.nota) return;
+  const ed = $('.editor-area');
+  const { previewMode, previewUrl, adblockEnabled, youtubeNoCookie, youtubeDirect } = state.settings;
+  try {
+    await invoke('vista_previa', { doc: {
+      nombre: t.name,
+      ext: t.ext,
+      // Un .html se edita como marcado real; el resto, como texto.
+      texto: t.rich ? ed.innerHTML : htmlToPlain(ed.innerHTML),
+      ajustes: { previewMode, previewUrl, adblockEnabled, youtubeNoCookie, youtubeDirect },
+    } });
+  } catch (e) {
+    vistaCerrada();
+    toast(tr('vp.error', { motivo: e }));
+  }
+}
+
 function schedulePreview() {
-  if (!state.settings.previewOpen) return;
-  // URL mode is independent of editor content — don't re-render on every keystroke
-  if (effectivePreviewMode() === 'url') return;
+  if (!vistaAbierta) return;
   // Large files: don't auto-rebuild the preview while typing (use Refresh).
   const t = activeTab();
   if (t && t.big) return;
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(renderPreview, 350);
+  previewTimer = setTimeout(enviarVistaPrevia, 350);
 }
 
-function effectivePreviewMode() {
-  const m = state.settings.previewMode;
-  if (m !== 'auto') return m;
+function togglePreview() {
+  if (vistaAbierta) { invoke('vista_previa_cerrar'); return; }
   const t = activeTab();
-  if (!t) return 'md';
-  if (t.ext === 'html') return 'html';
-  if (t.ext === 'md') return 'md';
-  // svg / css fall through to html render
-  return 'html';
+  if (!t || t.nota) return;
+  vistaAbierta = true;
+  $('#preview-btn').classList.add('active');
+  enviarVistaPrevia();
 }
 
-function youtubeEmbed(url) {
-  try {
-    const u = new URL(url);
-    const h = u.hostname.replace(/^www\./,'');
-    // If user toggled "direct" mode, pass YT URLs through unchanged (no /embed/)
-    if (state.settings.youtubeDirect) {
-      if (h === 'youtube.com' || h === 'm.youtube.com' || h === 'youtu.be') return url;
-    }
-    const host = state.settings.youtubeNoCookie ? 'https://www.youtube-nocookie.com' : 'https://www.youtube.com';
-    // Privacy + less spam params:
-    //  rel=0  → no related videos at end
-    //  modestbranding=1 → smaller YT logo
-    //  iv_load_policy=3 → no annotations
-    //  fs=1 fullscreen allowed
-    //  cc_load_policy=0 default cc state
-    const extra = 'rel=0&modestbranding=1&iv_load_policy=3&fs=1';
-    const build = (id, start) => {
-      let q = extra;
-      if (start) q += '&start=' + start;
-      return `${host}/embed/${id}?${q}`;
-    };
-    if (h === 'youtube.com' || h === 'm.youtube.com') {
-      const v = u.searchParams.get('v');
-      const t = parseInt(u.searchParams.get('t') || u.searchParams.get('start') || '0') || 0;
-      if (v) return build(v, t);
-      if (u.pathname.startsWith('/shorts/')) return build(u.pathname.split('/')[2], 0);
-      if (u.pathname.startsWith('/embed/')) {
-        const id = u.pathname.split('/')[2];
-        return build(id, parseInt(u.searchParams.get('start')||'0')||0);
-      }
-    }
-    if (h === 'youtu.be') {
-      const id = u.pathname.replace(/^\//,'').split('/')[0];
-      const t = parseInt(u.searchParams.get('t')||'0')||0;
-      return build(id, t);
-    }
-  } catch {}
-  return null;
+function vistaCerrada() {
+  vistaAbierta = false;
+  $('#preview-btn').classList.remove('active');
 }
 
-function normalizeUrl(raw) {
-  raw = (raw || '').trim();
-  if (!raw) return '';
-  // Common typos: ttps:// → https://, ttp:// → http://
-  if (/^ttps:\/\//i.test(raw)) raw = 'h' + raw;
-  else if (/^ttp:\/\//i.test(raw)) raw = 'h' + raw;
-  if (/^https?:\/\//i.test(raw)) return raw;
-  if (/^localhost(:\d+)?($|\/)/i.test(raw)) return 'http://' + raw;
-  if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?($|\/)/.test(raw)) return 'http://' + raw;
-  if (/^[\w.-]+\.[a-z]{2,}/i.test(raw)) return 'https://' + raw;
-  return raw;
-}
-
-function renderPreview() {
-  const body = $('#preview-body');
-  if (!body) return;
-  const myToken = ++previewToken;
-  body.innerHTML = '';
-  const mode = effectivePreviewMode();
-  setActivePill(state.settings.previewMode);
-
-  if (mode === 'url' || state.settings.previewMode === 'url') {
-    const url = (state.settings.previewUrl || '').trim();
-    if (!url) { showPreviewEmpty(body, 'Pega una URL arriba. YouTube se embebe automáticamente.'); return; }
-    const yt = youtubeEmbed(url);
-    const final = yt || normalizeUrl(url);
-    // Adblock pre-check
-    if (state.settings.adblockEnabled) {
-      invoke('adblock_check', { url: final, sourceUrl: 'about:blank' }).then(res => {
-        if (myToken !== previewToken) return; // stale render — bail
-        body.innerHTML = '';
-        if (res && res.blocked) {
-          showAdblockBlocked(body, final, res.rule || '');
-        } else {
-          mountUrlIframe(body, final);
-        }
-      }).catch(() => {
-        if (myToken !== previewToken) return;
-        body.innerHTML = '';
-        mountUrlIframe(body, final);
-      });
-    } else {
-      mountUrlIframe(body, final);
-    }
-    return;
-  }
-
-  const t = activeTab();
-  if (!t) { showPreviewEmpty(body, 'Sin pestaña activa'); return; }
-  const ed = $('.editor-area');
-  const text = ed ? htmlToPlain(ed.innerHTML) : '';
-
-  if (mode === 'html') {
-    const f = document.createElement('iframe');
-    // OJO: nunca combinar allow-scripts + allow-same-origin en srcdoc — el
-    // documento previsualizado quedaría en el MISMO origen que la app y sus
-    // scripts alcanzarían el bridge de Tauri. Sin allow-same-origin el iframe
-    // corre en origen opaco: scripts sí, acceso a la app no.
-    f.sandbox = 'allow-scripts allow-forms allow-popups allow-modals';
-    f.referrerPolicy = 'no-referrer';
-    // For SVG: wrap in HTML container if it's just <svg>
-    let doc = text;
-    if (t.ext !== 'html' && /^\s*<svg/i.test(text)) {
-      doc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;height:100%;display:flex;align-items:center;justify-content:center}svg{max-width:100%;max-height:100%}</style></head><body>${text}</body></html>`;
-    } else if (t.ext === 'css') {
-      doc = `<!doctype html><html><head><meta charset="utf-8"><style>${text}</style></head><body><h1>Heading</h1><p>Lorem ipsum dolor sit amet, <a href="#">link</a>, <strong>bold</strong>, <em>italic</em>.</p><button>Botón</button> <input placeholder="input"> <ul><li>uno</li><li>dos</li></ul></body></html>`;
-    }
-    f.srcdoc = doc;
-    body.appendChild(f);
-    return;
-  }
-
-  if (mode === 'md') {
-    const div = document.createElement('div');
-    div.className = 'preview-md';
-    let html = '';
-    if (window.marked) {
-      try {
-        window.marked.setOptions({ breaks: true, gfm: true });
-        html = window.marked.parse(text || '');
-      } catch (e) { html = '<pre>' + escapeHtml(text) + '</pre>'; }
-    } else {
-      html = '<pre>' + escapeHtml(text) + '</pre>';
-    }
-    div.innerHTML = html;
-    // Sanea el HTML embebido en el markdown: un .md ajeno no debe poder
-    // ejecutar scripts dentro del webview de la app.
-    div.querySelectorAll('script,iframe,object,embed,link,meta,base,form').forEach(n => n.remove());
-    div.querySelectorAll('*').forEach(el => {
-      for (const a of [...el.attributes]) {
-        const n = a.name.toLowerCase();
-        if (n.startsWith('on')) el.removeAttribute(a.name);
-        else if ((n === 'href' || n === 'src' || n === 'xlink:href') && /^\s*javascript:/i.test(a.value)) el.removeAttribute(a.name);
-      }
-    });
-    // Open external links in new context (intercept)
-    div.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
-    body.appendChild(div);
-    return;
-  }
-}
-
-function mountUrlIframe(body, final) {
-  const isYt = /youtube(-nocookie)?\.com\/embed\//.test(final) || /youtube\.com\/watch/.test(final) || /youtu\.be/.test(final);
-  body.classList.toggle('yt-fit', isYt);
-  const f = document.createElement('iframe');
-  f.src = final;
-  f.referrerPolicy = 'strict-origin-when-cross-origin';
-  f.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen';
-  f.setAttribute('allowfullscreen', '');
-  body.appendChild(f);
-  updateShieldBadge(true, final);
-  // For YouTube embeds, add a floating action bar with PiP/external player options
-  if (/youtube(-nocookie)?\.com\/embed\//.test(final) || /youtube\.com\/watch/.test(final) || /youtu\.be/.test(final)) {
-    addYtActionBar(body, state.settings.previewUrl || final);
-  }
-}
-
-function addYtActionBar(body, originalUrl) {
-  const bar = document.createElement('div');
-  bar.className = 'yt-actions';
-  bar.innerHTML = `
-    <button class="yt-action" id="yt-ext" title="Abrir en navegador">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
-      <span>Abrir en navegador</span>
-    </button>`;
-  body.appendChild(bar);
-  bar.querySelector('#yt-ext').addEventListener('click', () => openExternal(originalUrl));
-}
-
-async function playFloating(url) {
-  try {
-    const avail = await invoke('check_player_available');
-    if (!avail.canPlayYoutube) {
-      const missing = [];
-      if (!avail.mpv) missing.push('mpv');
-      if (!avail.ytdlp) missing.push('yt-dlp');
-      toast('Falta instalar: ' + missing.join(' + ') + ' (sudo pacman -S ' + missing.join(' ') + ')');
-      return;
-    }
-    // Calculate screen position of the preview-body so mpv overlays it
-    const rect = $('#preview-body').getBoundingClientRect();
-    let winPos = { x: 0, y: 0 };
-    try {
-      const pos = await tauriWin().outerPosition();
-      winPos = { x: pos.x, y: pos.y };
-    } catch {}
-    const dpr = window.devicePixelRatio || 1;
-    const args = {
-      url: normalizeUrl(url),
-      x: Math.round(winPos.x + rect.left * dpr),
-      y: Math.round(winPos.y + rect.top * dpr),
-      w: Math.round(rect.width * dpr),
-      h: Math.round(rect.height * dpr)
-    };
-    await invoke('play_in_mpv', args);
-    toast('Abierto en mpv encima del preview');
-  } catch (e) {
-    toast('Error mpv: ' + e);
-  }
-}
-
-async function openExternal(url) {
-  try {
-    const fixed = normalizeUrl(url);
-    await invoke('open_url_external', { url: fixed });
-    toast('Abriendo en navegador…');
-  } catch (e) {
-    toast('Error: ' + e);
-  }
-}
-
-function showAdblockBlocked(body, url, rule) {
-  const d = document.createElement('div');
-  d.className = 'preview-empty';
-  d.innerHTML = `
-    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>
-    <div style="font-weight:600;color:var(--red);font-size:14px">URL bloqueada por filtro</div>
-    <div style="opacity:.8;font-size:11.5px;max-width:340px;word-break:break-all;line-height:1.5">${escapeHtml(url)}</div>
-    <div style="opacity:.5;font-size:11px;font-family:'JetBrains Mono',monospace;max-width:340px;word-break:break-all">${escapeHtml(rule || 'regla desconocida')}</div>
-    <button class="tool-btn" id="adblock-bypass" style="margin-top:8px;background:var(--sbg);padding:6px 14px;opacity:1">Cargar igualmente</button>`;
-  body.appendChild(d);
-  const btn = d.querySelector('#adblock-bypass');
-  if (btn) btn.addEventListener('click', () => {
-    body.innerHTML = '';
-    mountUrlIframe(body, url);
-  });
-  updateShieldBadge(false, url);
-}
-
-let _adblockBlockedCount = 0;
-function updateShieldBadge(ok, url) {
-  const sh = $('#shield-badge');
-  if (!sh) return;
-  const SHIELD_OK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>`;
-  const SHIELD_BLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z"/></svg>`;
-  const SHIELD_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3"><path d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>`;
-  if (!ok && state.settings.adblockEnabled) _adblockBlockedCount++;
-  const countBadge = _adblockBlockedCount > 0
-    ? `<span class="shield-count">${_adblockBlockedCount > 99 ? '99+' : _adblockBlockedCount}</span>`
-    : '';
-  if (!state.settings.adblockEnabled) {
-    sh.innerHTML = SHIELD_OFF;
-    sh.title = 'Adblock desactivado';
-    sh.className = 'tool-btn shield-badge off';
-    return;
-  }
-  sh.innerHTML = (ok ? SHIELD_OK : SHIELD_BLOCK) + countBadge;
-  sh.title = (ok ? 'Adblock activo · permitido' : 'Adblock bloqueó: ' + url)
-    + (_adblockBlockedCount > 0 ? ` · ${_adblockBlockedCount} bloqueos esta sesión` : '');
-  sh.className = 'tool-btn shield-badge ' + (ok ? 'on' : 'block');
-}
-
-function showPreviewEmpty(body, msg) {
-  const d = document.createElement('div');
-  d.className = 'preview-empty';
-  d.innerHTML = `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/><path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg><span>${escapeHtml(msg)}</span>`;
-  body.appendChild(d);
-}
-
-function setActivePill(mode) {
-  document.querySelectorAll('.preview-mode-pills .pill').forEach(b => {
-    b.classList.toggle('on', b.dataset.pmode === mode);
-  });
-}
-
-function togglePreview(force) {
-  state.settings.previewOpen = (force === undefined) ? !state.settings.previewOpen : !!force;
-  applyPreviewLayout();
-  saveState();
-  $('#preview-btn').classList.toggle('active', state.settings.previewOpen);
-  if (state.settings.previewOpen) renderPreview();
-}
-
-function applyPreviewLayout() {
-  const pane = $('#preview-pane');
-  const splitter = $('#splitter');
-  const open = state.settings.previewOpen;
-  pane.classList.toggle('hidden', !open);
-  splitter.style.display = open ? '' : 'none';
-  applySplit();
-}
-
-function applySplit() {
-  const pct = Math.max(20, Math.min(80, state.settings.previewSplit || 50));
-  const editor = $('#editor-pane');
-  const preview = $('#preview-pane');
-  if (state.settings.previewOpen) {
-    editor.style.flex = `0 0 ${pct}%`;
-    preview.style.flex = `1 1 auto`;
-  } else {
-    editor.style.flex = '1 1 auto';
-  }
-}
-
-function wireSplitter() {
-  const s = $('#splitter');
-  let dragging = false;
-  let startX = 0;
-  let startPct = 50;
-  const onMove = (e) => {
-    if (!dragging) return;
-    const split = $('#split');
-    const rect = split.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    const pct = Math.max(20, Math.min(80, (x / rect.width) * 100));
-    state.settings.previewSplit = pct;
-    applySplit();
-  };
-  const onUp = () => {
-    if (!dragging) return;
-    dragging = false;
-    s.classList.remove('drag');
-    document.body.style.cursor = '';
+function wireVistaPrevia() {
+  const ev = window.__TAURI__.event;
+  ev.listen('vista-previa-cerrada', vistaCerrada);
+  ev.listen('vista-previa-pide', enviarVistaPrevia);
+  ev.listen('vista-previa-ajuste', (e) => {
+    const [clave, valor] = e.payload;
+    state.settings[clave] = valor;
     saveState();
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-  };
-  s.addEventListener('mousedown', (e) => {
-    dragging = true;
-    startX = e.clientX;
-    startPct = state.settings.previewSplit || 50;
-    s.classList.add('drag');
-    document.body.style.cursor = 'col-resize';
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    renderSettings();
   });
-}
-
-function wirePreviewBar() {
-  document.querySelectorAll('.preview-mode-pills .pill').forEach(b => {
-    b.addEventListener('click', () => {
-      state.settings.previewMode = b.dataset.pmode;
-      setActivePill(b.dataset.pmode);
-      saveState();
-      renderPreview();
-    });
-  });
-  const inp = $('#url-input');
-  const go = () => {
-    state.settings.previewMode = 'url';
-    state.settings.previewUrl = inp.value;
-    setActivePill('url');
-    saveState();
-    renderPreview();
-  };
-  inp.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); go(); }
-  });
-  $('#url-go').addEventListener('click', go);
-  $('#preview-refresh').addEventListener('click', renderPreview);
-  $('#preview-close').addEventListener('click', () => togglePreview(false));
-  $('#shield-badge').addEventListener('click', () => {
-    state.settings.adblockEnabled = !state.settings.adblockEnabled;
-    invoke('adblock_set_enabled', { enabled: state.settings.adblockEnabled }).catch(()=>{});
-    saveState();
-    toast('Adblock: ' + (state.settings.adblockEnabled ? 'ON' : 'OFF'));
-    renderPreview();
-  });
-  // Restore saved URL
-  if (state.settings.previewUrl) inp.value = state.settings.previewUrl;
   // Sync Rust side with persisted state
   invoke('adblock_set_enabled', { enabled: !!state.settings.adblockEnabled }).catch(()=>{});
 }
@@ -856,6 +686,7 @@ function onEditorBeforeInput(e) {
 }
 
 function onEditorKeydown(e) {
+  if (e.key === 'Tab' && marcoImagen) return;
   // Tab — insert 2 spaces (or 4 for non-code)
   if (e.key === 'Tab') {
     e.preventDefault();
@@ -1062,6 +893,13 @@ function refreshToolbarState() {
     const cmd = btn.dataset.cmd;
     let on = false;
     try { on = document.queryCommandState(cmd); } catch {}
+    // A la izquierda es lo normal: encendido siempre, parecía una opción elegida.
+    if (cmd === 'justifyLeft') on = false;
+    // El título de una nota es negrita por estilo, no porque se haya pulsado B.
+    if (cmd === 'bold' && on) {
+      const titulo = document.querySelector('.editor-area.nota > :first-child');
+      if (titulo?.contains(window.getSelection().anchorNode)) on = false;
+    }
     btn.classList.toggle('active', on);
   }
 }
@@ -1081,7 +919,7 @@ function zoomReset() { setZoom(100); }
 // ───────── FILE IO ─────────
 async function openFile() {
   try {
-    const sel = await dialog().open({
+    const sel = await elegirRuta('open', {
       multiple: true,
       filters: [
         { name: 'Todos los archivos', extensions: ['*'] },
@@ -1112,24 +950,19 @@ async function saveFile(forceAs=false) {
   saveActiveContent();
   const t = activeTab();
   if (!t) return;
+  if (t.nota && !forceAs) { await guardarNota(t); return; }
   let path = t.path;
   if (!path || forceAs) {
-    const dlg = (window.__TAURI__ && window.__TAURI__.dialog);
-    if (!dlg || typeof dlg.save !== 'function') {
-      console.error('dialog plugin unavailable', window.__TAURI__);
-      toast('Error: diálogo no disponible');
-      return;
-    }
     try {
-      path = await dlg.save({
-        defaultPath: t.name,
+      path = await elegirRuta('save', {
+        defaultPath: t.nota ? t.name.replace(/[\\/]/g, '-') + '.html' : t.name,
         filters: [
           { name: 'Texto', extensions: ['txt'] },
           { name: 'Markdown', extensions: ['md'] },
           { name: 'HTML', extensions: ['html'] }
         ]
       });
-    } catch (e) { console.error('dialog.save failed', e); toast('Error diálogo: ' + e); return; }
+    } catch (e) { console.error('elegirRuta save failed', e); toast('Error diálogo: ' + e); return; }
     if (!path) return;
   }
   // Don't blindly clobber a file that changed on disk since we loaded it.
@@ -1142,6 +975,8 @@ async function saveFile(forceAs=false) {
   const payload = isRichExt(savedRawExt) ? ed.innerHTML : htmlToPlain(ed.innerHTML);
   try {
     const mtime = await invoke('write_file', { path, contents: payload, encoding: t.encoding || 'utf-8', eol: t.eol || 'lf' });
+    // «Guardar como» en una nota saca una copia; la nota sigue en su carpeta.
+    if (t.nota) { toast(tr('notas.exportada', { nombre: path.split(/[\\/]/).pop() })); return; }
     const extChanged = t.rawExt !== savedRawExt;
     t.path = path;
     t.name = path.split(/[\\/]/).pop();
@@ -1210,7 +1045,8 @@ function wireFileWatch() {
   ev.listen('tauri://focus', async () => {
     if (busy) return;
     const t = activeTab();
-    if (!t || !t.path) return;
+    // La carpeta de notas solo la escribe esta app (instancia única).
+    if (!t || !t.path || t.nota) return;
     busy = true;
     try {
       if (await diskChanged(t)) {
@@ -1254,6 +1090,7 @@ function scheduleAutoSave() {
 // ───────── PAGES ─────────
 function showPage(name) {
   const wasEditor = currentPage === 'editor';
+  if (wasEditor && name !== 'editor') saveActiveContent();
   currentPage = name;
   const pages = { editor: $('#page-editor'), settings: $('#page-settings') };
   for (const k in pages) {
@@ -1265,8 +1102,10 @@ function showPage(name) {
     } else p.classList.add('hidden');
   }
   $('#settings-btn').classList.toggle('active', name === 'settings');
+  $('#mc').classList.toggle('en-ajustes', name === 'settings');
+  updateTitle();
   $('#toolbar').style.display = name === 'editor' ? '' : 'none';
-  if (name === 'settings') { saveActiveContent(); renderSettings(); }
+  if (name === 'settings') { renderSettings(); }
   else if (!wasEditor) { renderEditor(); }
 }
 
@@ -1335,13 +1174,13 @@ function wireSettings() {
   }
   wireToggle('tg-adblock', 'adblockEnabled', () => {
     invoke('adblock_set_enabled', { enabled: state.settings.adblockEnabled }).catch(()=>{});
-    if (state.settings.previewOpen) renderPreview();
+    enviarVistaPrevia();
   });
   wireToggle('tg-yt-nocookie', 'youtubeNoCookie', () => {
-    if (state.settings.previewOpen) renderPreview();
+    enviarVistaPrevia();
   });
   wireToggle('tg-yt-direct', 'youtubeDirect', () => {
-    if (state.settings.previewOpen) renderPreview();
+    enviarVistaPrevia();
   });
   const openSc = document.getElementById('open-shortcuts');
   if (openSc) openSc.addEventListener('click', () => toggleShortcutsPalette(true));
@@ -1490,20 +1329,17 @@ function wireWindow() {
   $('#minimize').addEventListener('click', () => tauriWin().minimize());
   $('#maximize').addEventListener('click', () => tauriWin().toggleMaximize());
   $('#close').addEventListener('click', async () => {
-    const dirty = tabs.filter(t => t.dirty);
+    const dirty = tabs.filter(t => t.dirty && !t.nota);
     if (dirty.length) {
       const ok = confirm(`${dirty.length} pestaña(s) sin guardar. ¿Salir igualmente?`);
       if (!ok) return;
     }
+    await Promise.all(tabs.filter(t => t.nota).map(guardarNota));
     tauriWin().close();
   });
-  $('#theme-btn').addEventListener('click', cycleTheme);
-  $('#fullscreen-btn').addEventListener('click', toggleFullscreen);
-  const scBtn = document.getElementById('shortcuts-btn');
-  if (scBtn) scBtn.addEventListener('click', () => toggleShortcutsPalette());
   $('#settings-btn').addEventListener('click', () => showPage(currentPage === 'settings' ? 'editor' : 'settings'));
   $('#preview-btn').addEventListener('click', () => { showPage('editor'); togglePreview(); });
-  $('#new-btn').addEventListener('click', () => { showPage('editor'); newTab(); });
+  $('#new-btn').addEventListener('click', () => { showPage('editor'); nuevaNota(); });
   $('#open-btn').addEventListener('click', () => { showPage('editor'); openFile(); });
   $('#save-btn').addEventListener('click', () => saveFile(false));
 }
@@ -1534,8 +1370,8 @@ function wireToolbar() {
 // Bindings are strings like "Ctrl+N", "Ctrl+Shift+S", "F11", "Ctrl+Tab".
 const ACTIONS = [
   // File
-  { id:'new-tab',      sec:'Archivo',  label:'Nueva pestaña',     def:'Ctrl+N',     run:()=>{ showPage('editor'); newTab(); } },
-  { id:'new-tab-alt',  sec:'Archivo',  label:'Nueva pestaña (alt)',def:'Ctrl+T',    run:()=>{ showPage('editor'); newTab(); } },
+  { id:'new-tab',      sec:'Archivo',  label:'Nueva nota',        def:'Ctrl+N',     run:()=>{ showPage('editor'); nuevaNota(); } },
+  { id:'new-tab-alt',  sec:'Archivo',  label:'Nueva pestaña de archivo',def:'Ctrl+T', run:()=>{ showPage('editor'); newTab(); } },
   { id:'open-file',    sec:'Archivo',  label:'Abrir archivo',     def:'Ctrl+O',     run:()=>{ showPage('editor'); openFile(); } },
   { id:'save',         sec:'Archivo',  label:'Guardar',           def:'Ctrl+S',     run:()=>saveFile(false) },
   { id:'save-as',      sec:'Archivo',  label:'Guardar como',      def:'Ctrl+Shift+S', run:()=>saveFile(true) },
@@ -1543,7 +1379,7 @@ const ACTIONS = [
   // Navigation
   { id:'next-tab-mru', sec:'Navegación',label:'Pestaña anterior usada', def:'Ctrl+Tab', run:()=>cycleTab('mru') },
   { id:'prev-tab',     sec:'Navegación',label:'Pestaña previa',   def:'Ctrl+Shift+Tab', run:()=>cycleTab('prev') },
-  { id:'preview',      sec:'Vista',    label:'Mostrar/ocultar preview', def:'Ctrl+P', run:()=>{ showPage('editor'); togglePreview(); } },
+  { id:'preview',      sec:'Vista',    label:'Vista previa', def:'Ctrl+P', run:()=>{ showPage('editor'); togglePreview(); } },
   { id:'settings',     sec:'Vista',    label:'Abrir/cerrar ajustes', def:'Ctrl+,',   run:()=>showPage(currentPage === 'settings' ? 'editor' : 'settings') },
   { id:'fullscreen',   sec:'Vista',    label:'Pantalla completa', def:'F11',        run:()=>toggleFullscreen() },
   { id:'shortcuts',    sec:'Vista',    label:'Mostrar atajos',    def:'Ctrl+/',     run:()=>toggleShortcutsPalette() },
@@ -1635,6 +1471,7 @@ function doUndoRedo(redo) {
   if (currentPage !== 'editor') return;
   const ed = $('.editor-area');
   if (!ed) return;
+  quitarMarcoImagen();
   ed.focus();
   document.execCommand(redo ? 'redo' : 'undo');
   refreshToolbarState();
@@ -1661,6 +1498,9 @@ function wireKeys() {
     if (!combo) return;
     // Escape special — close modal/return to editor
     if (e.key === 'Escape') {
+      if (!$('#dialogo-borrar').hidden) {
+        e.preventDefault(); $('#dialogo-borrar').hidden = true; return;
+      }
       if ($('#find-bar')?.classList.contains('open')) {
         e.preventDefault(); closeFindBar(); return;
       }
@@ -2189,7 +2029,11 @@ function wireDragDrop() {
       if (empty) { tabs.splice(0, 1); activeId = null; }
     }
     let opened = 0;
-    for (const p of paths) if (await openPathAsTab(p)) opened++;
+    for (const p of paths) {
+      // Una imagen soltada se inserta; abrirla como texto no sirve.
+      if (esImagen(p)) await insertarImagenDeRuta(p, rangoEnEditor());
+      else if (await openPathAsTab(p)) opened++;
+    }
     if (opened) {
       toast(`Abierto: ${opened} archivo${opened>1?'s':''}`);
       renderTabs();
@@ -2201,6 +2045,575 @@ function wireDragDrop() {
   // CLI files ("Open With") are pulled on boot via take_cli_files — see init().
 }
 
+// ───────── NOTAS ─────────
+// Una nota es una pestaña más (`nota:true`): así el editor, el formato, la
+// búsqueda y el zoom sirven igual. Lo que cambia es que vive en la lista
+// lateral en vez de en la fila de pestañas y que se guarda sola en su carpeta.
+const tr = (clave, vars) => BookosI18n.t(clave, vars);
+let carpetaNotas = '';   // vacía mientras no se haya podido leer la carpeta
+let errorNotas = '';
+let filtroNotas = '';
+
+function notas() {
+  return tabs.filter(t => t.nota).sort((a, b) => b.mtime - a.mtime);
+}
+
+// Título y extracto salen del texto: la primera línea con algo y la siguiente.
+function resumirNota(t, texto, imagen) {
+  const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+  t.texto = lineas.join('\n');
+  t.name = lineas[0] || tr(imagen ? 'notas.soloImagen' : 'notas.nueva');
+  t.extracto = lineas[1] || '';
+  if (imagen === t.imagen) return;
+  t.imagen = imagen;
+  t.miniatura = '';
+  if (!imagen) return;
+  // La fila enseña una copia de 80px y no la imagen de la nota: la lista se
+  // repinta al escribir, y cada vez habría que decodificar el original entero.
+  const img = new Image();
+  img.onload = () => {
+    if (t.imagen !== imagen) return;
+    const lado = Math.min(img.naturalWidth, img.naturalHeight);
+    const lienzo = document.createElement('canvas');
+    lienzo.width = lienzo.height = 80;
+    lienzo.getContext('2d').drawImage(img, (img.naturalWidth - lado) / 2, (img.naturalHeight - lado) / 2, lado, lado, 0, 0, 80, 80);
+    t.miniatura = lienzo.toDataURL('image/jpeg', .8);
+    pintarLista();
+  };
+  img.src = imagen;
+}
+
+// Una nota vacía no tiene texto ni imagen.
+const notaVacia = (t) => !t.texto && !t.imagen;
+
+function crearNota(ruta, html, mtime, enDisco) {
+  const t = { id: 'tab-' + (tabSeq++), nota: true, enDisco, path: ruta, ext: 'html', rawExt: 'html',
+              rich: true, big: false, content: html, dirty: false, encoding: 'utf-8', mtime,
+              estadoGuardado: enDisco ? 'guardado' : 'nuevo' };
+  // Sin las <img>: htmlToPlain monta el HTML en un <div> y las cargaría todas.
+  resumirNota(t, htmlToPlain(html.replace(/<img[^>]*>/g, '')), /<img[^>]+src="([^"]+)"/.exec(html)?.[1] || '');
+  tabs.push(t);
+  return t;
+}
+
+async function cargarNotas() {
+  try {
+    const r = await invoke('notas_listar');
+    carpetaNotas = r.carpeta;
+    errorNotas = '';
+    for (const n of r.notas) crearNota(n.ruta, n.html, n.mtime, true);
+  } catch (e) {
+    errorNotas = String(e);
+  }
+}
+
+function nuevaNota() {
+  // Sin carpeta de notas no hay dónde guardarla: queda el archivo sin título.
+  if (!carpetaNotas) return newTab();
+  // Una nota vacía que aún no está en disco ya es «la nueva»: no se apilan.
+  const actual = activeTab();
+  if (actual?.nota && !actual.enDisco && notaVacia(actual)) { $('.editor-area')?.focus(); return actual; }
+  if (filtroNotas) { filtroNotas = ''; $('#lista-buscar').value = ''; }
+  const t = crearNota(`${carpetaNotas}/${Date.now().toString(36)}.html`, '', Date.now() / 1000, false);
+  setActive(t.id);
+  return t;
+}
+
+function abrirNotaReciente() {
+  const t = notas()[0];
+  if (t) setActive(t.id); else nuevaNota();
+}
+
+// El título es el primer bloque de la nota. Con el editor vacío WebKit deja el
+// primer renglón como texto suelto en la raíz, sin elemento al que dar estilo,
+// así que siempre hay un <div> donde cae lo que se escribe. Se descartó
+// ::first-line, que no necesita nada de esto: con un título de dos renglones
+// solo ponía en negrita el primero.
+function asegurarTitulo(ed) {
+  const esBloque = (n) => n.nodeType === 1 && _BLOCK_TAGS.has(n.tagName);
+  if (ed.firstChild && esBloque(ed.firstChild)) return;
+  const enfocado = document.activeElement === ed;
+  const cursor = enfocado ? saveCaretOffset(ed) : null;
+  const titulo = document.createElement('div');
+  while (ed.firstChild && !esBloque(ed.firstChild)) titulo.appendChild(ed.firstChild);
+  if (!titulo.firstChild) titulo.appendChild(document.createElement('br'));
+  ed.prepend(titulo);
+  if (!enfocado) return;
+  if (titulo.textContent) { restoreCaretOffset(ed, cursor ?? 0); return; }
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  const rango = document.createRange();
+  rango.setStart(titulo, 0);
+  sel.addRange(rango);
+}
+
+function notaEditada(t, e) {
+  const antes = t.name + '\n' + t.extracto + '\n' + t.imagen;
+  const primerCambio = !t.dirty;
+  const ed = $('.editor-area');
+  asegurarTitulo(ed);
+  // Intro tras una tarea hecha: WebKit clona el <li> con su clase, y la tarea
+  // nueva nacía ya tachada.
+  if (e?.inputType === 'insertParagraph') elementoDelCursor()?.closest('li.hecha')?.classList.remove('hecha');
+  t.dirty = true;
+  t.estadoGuardado = t.guardadoEnCurso ? 'guardando' : 'pendiente';
+  actualizarGuardado(t);
+  t.mtime = Date.now() / 1000;
+  resumirNota(t, ed.innerText, ed.querySelector('img')?.src || '');
+  ed.classList.toggle('vacia', notaVacia(t));
+  // La lista solo cambia si cambia lo que enseña, o si la nota sube arriba.
+  if (primerCambio || antes !== t.name + '\n' + t.extracto + '\n' + t.imagen) {
+    pintarLista();
+    updateTitle();
+    $('.nota-fecha').textContent = fechaLarga(t.mtime);
+  }
+  clearTimeout(t.temporizador);
+  t.temporizador = setTimeout(() => guardarNota(t), 600);
+}
+
+function actualizarGuardado(t) {
+  if (activeId !== t.id) return;
+  const boton = $('.nota-guardado');
+  if (!boton) return;
+  boton.textContent = tr('notas.guardado.' + t.estadoGuardado);
+  boton.disabled = t.estadoGuardado !== 'error';
+  boton.classList.toggle('error', t.estadoGuardado === 'error');
+  boton.title = t.estadoGuardado === 'error'
+    ? tr('notas.guardado.reintentar', { motivo: t.errorGuardado }) : '';
+}
+
+async function guardarNota(t) {
+  clearTimeout(t.temporizador);
+  if (t.guardadoEnCurso) return t.guardadoEnCurso;
+  // Vacía y sin archivo todavía: no se crea un .html en blanco.
+  if (!t.dirty) return;
+  if (notaVacia(t) && !t.enDisco) {
+    t.estadoGuardado = 'nuevo';
+    actualizarGuardado(t);
+    return;
+  }
+  // Una sola escritura por nota: una respuesta lenta no puede sobrescribir
+  // una versión más reciente ni anunciar «Guardado» con cambios pendientes.
+  t.guardadoEnCurso = (async () => {
+    try {
+      do {
+        if (activeId === t.id) saveActiveContent();
+        t.dirty = false;
+        t.estadoGuardado = 'guardando';
+        actualizarGuardado(t);
+        await invoke('write_file', { path: t.path, contents: t.content, encoding: 'utf-8', eol: 'lf' });
+        t.enDisco = true;
+      } while (t.dirty);
+      t.estadoGuardado = 'guardado';
+    } catch (e) {
+      t.dirty = true;
+      t.estadoGuardado = 'error';
+      t.errorGuardado = String(e);
+      toast(tr('notas.error.guardar', { motivo: e }));
+    } finally {
+      t.guardadoEnCurso = null;
+      actualizarGuardado(t);
+    }
+  })();
+  return t.guardadoEnCurso;
+}
+
+// Al dejar de mirar una nota: se guarda, o se descarta si nunca tuvo nada.
+function soltarNota(t) {
+  if (notaVacia(t) && !t.enDisco) tabs.splice(tabs.indexOf(t), 1);
+  else guardarNota(t);
+}
+
+function pedirBorrado() {
+  const t = activeTab();
+  if (!t?.nota) return;
+  if (notaVacia(t)) { borrarNota(t); return; }
+  const nombre = t.name.length > 60 ? t.name.slice(0, 60) + '…' : t.name;
+  $('#dialogo-borrar-texto').textContent = tr('notas.borrar.texto', { nombre });
+  $('#dialogo-borrar').hidden = false;
+  $('#borrar-no').focus();
+}
+
+async function borrarNota(t) {
+  clearTimeout(t.temporizador);
+  t.dirty = false;
+  if (t.enDisco) {
+    try { await invoke('nota_borrar', { ruta: t.path }); }
+    catch (e) { toast(tr('notas.error.borrar', { motivo: e })); return; }
+  }
+  const orden = notas();
+  const i = orden.indexOf(t);
+  const siguiente = orden[i + 1] || orden[i - 1];
+  tabs.splice(tabs.indexOf(t), 1);
+  if (activeId !== t.id) { pintarLista(); return; }
+  activeId = null;
+  if (siguiente) setActive(siguiente.id); else nuevaNota();
+}
+
+function diasDesde(mtime) {
+  return Math.ceil((new Date().setHours(0, 0, 0, 0) - mtime * 1000) / 86400000);
+}
+function grupoDe(mtime) {
+  const dias = diasDesde(mtime);
+  if (dias <= 0) return tr('notas.hoy');
+  if (dias === 1) return tr('notas.ayer');
+  if (dias <= 7) return tr('notas.semana');
+  if (dias <= 30) return tr('notas.mes');
+  return String(new Date(mtime * 1000).getFullYear());
+}
+function fechaCorta(mtime) {
+  const fecha = new Date(mtime * 1000);
+  const idioma = BookosI18n.getLang();
+  return diasDesde(mtime) <= 0
+    ? fecha.toLocaleTimeString(idioma, { timeStyle: 'short' })
+    : fecha.toLocaleDateString(idioma, { day: 'numeric', month: 'numeric', year: '2-digit' });
+}
+function fechaLarga(mtime) {
+  return new Date(mtime * 1000).toLocaleString(BookosI18n.getLang(), { dateStyle: 'long', timeStyle: 'short' });
+}
+
+function avisoLista(texto) {
+  const aviso = document.createElement('div');
+  aviso.className = 'lista-aviso';
+  aviso.textContent = texto;
+  $('#lista-notas').appendChild(aviso);
+  return aviso;
+}
+
+function pintarLista() {
+  const cont = $('#lista-notas');
+  const todas = notas();
+  cont.textContent = '';
+  $('#lista-cuenta').textContent = errorNotas ? ''
+    : tr(todas.length === 1 ? 'notas.cuenta.una' : 'notas.cuenta', { n: todas.length });
+  if (errorNotas) {
+    const reintentar = document.createElement('button');
+    reintentar.textContent = tr('notas.reintentar');
+    reintentar.addEventListener('click', async () => {
+      await cargarNotas();
+      if (errorNotas) pintarLista(); else abrirNotaReciente();
+    });
+    avisoLista(tr('notas.error.cargar', { motivo: errorNotas })).appendChild(reintentar);
+    return;
+  }
+  const busca = filtroNotas.toLowerCase();
+  const visibles = busca ? todas.filter(t => t.texto.toLowerCase().includes(busca)) : todas;
+  if (!visibles.length) { avisoLista(tr('notas.sinResultados', { texto: filtroNotas })); return; }
+  let etiqueta = null;
+  for (const t of visibles) {
+    const suya = grupoDe(t.mtime);
+    if (suya !== etiqueta) {
+      etiqueta = suya;
+      const cab = document.createElement('div');
+      cab.className = 'grupo-cab';
+      cab.textContent = suya;
+      cont.appendChild(cab);
+    }
+    const item = document.createElement('button');
+    item.className = 'nota-item' + (t.id === activeId ? ' sel' : '');
+    item.dataset.id = t.id;
+    const textos = document.createElement('span');
+    textos.className = 'nota-textos';
+    const nombre = document.createElement('span');
+    nombre.className = 'nota-nombre';
+    nombre.textContent = t.name;
+    const cuando = document.createElement('span');
+    cuando.className = 'nota-cuando';
+    cuando.textContent = fechaCorta(t.mtime);
+    const extracto = document.createElement('span');
+    extracto.className = 'nota-extracto';
+    extracto.append(cuando, t.extracto || tr('notas.sinTexto'));
+    textos.append(nombre, extracto);
+    item.appendChild(textos);
+    if (t.miniatura) {
+      const mini = document.createElement('img');
+      mini.className = 'nota-mini';
+      mini.alt = '';
+      mini.src = t.miniatura;
+      item.appendChild(mini);
+    }
+    cont.appendChild(item);
+  }
+}
+
+function wireNotas() {
+  $('#mc').classList.toggle('sin-lista', state.settings.listaOculta);
+  $('#lista-btn').addEventListener('click', () => {
+    state.settings.listaOculta = !state.settings.listaOculta;
+    $('#mc').classList.toggle('sin-lista', state.settings.listaOculta);
+    saveState();
+  });
+  $('#lista-notas').addEventListener('click', (e) => {
+    const item = e.target.closest('.nota-item');
+    if (!item) return;
+    setActive(item.dataset.id);
+    if (currentPage !== 'editor') showPage('editor');
+    $('.editor-area')?.focus();
+  });
+  $('#lista-buscar').addEventListener('input', (e) => {
+    filtroNotas = e.target.value.trim();
+    pintarLista();
+  });
+  $('#borrar-nota').addEventListener('click', pedirBorrado);
+  $('#imagen-btn').addEventListener('click', elegirImagenes);
+  $('#tareas-btn').addEventListener('click', insertarTareas);
+  $('#borrar-no').addEventListener('click', () => { $('#dialogo-borrar').hidden = true; });
+  $('#borrar-si').addEventListener('click', () => {
+    $('#dialogo-borrar').hidden = true;
+    const t = activeTab();
+    if (t?.nota) borrarNota(t);
+  });
+  // El escritorio puede cerrar la ventana sin pasar por el botón de la barra:
+  // al perder el foco no se espera a los 600ms del temporizador.
+  window.addEventListener('blur', () => {
+    const t = activeTab();
+    if (t?.nota) guardarNota(t);
+  });
+}
+
+// ───────── INSERTAR EN LA NOTA ─────────
+const EXT_IMAGEN = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'];
+const esImagen = (ruta) => EXT_IMAGEN.includes(rawExtOf(ruta));
+
+function elementoDelCursor() {
+  const nodo = window.getSelection().anchorNode;
+  return nodo && (nodo.nodeType === 1 ? nodo : nodo.parentElement);
+}
+
+// La imagen va dentro del .html de la nota como data:, y la nota sigue siendo
+// un solo archivo que se puede copiar o exportar entero. Por eso se reduce a
+// 1600px de lado: notas_listar lee todas las notas completas al arrancar.
+async function insertarImagen(blob, rango) {
+  const ed = $('.editor-area');
+  // En un archivo de texto la imagen se vería en el editor y desaparecería al
+  // guardar: solo se guarda el texto. Mejor no dejarla entrar.
+  if (!ed || !activeTab()?.rich) { toast(tr('notas.error.imagenTexto')); return; }
+  const img = new Image();
+  const url = URL.createObjectURL(blob);
+  img.src = url;
+  try { await img.decode(); }
+  catch { toast(tr('notas.error.imagen')); return; }
+  finally { URL.revokeObjectURL(url); }
+  const escala = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+  const lienzo = document.createElement('canvas');
+  lienzo.width = Math.round(img.naturalWidth * escala);
+  lienzo.height = Math.round(img.naturalHeight * escala);
+  lienzo.getContext('2d').drawImage(img, 0, 0, lienzo.width, lienzo.height);
+  // JPEG solo para lo que ya era JPEG: los demás formatos pueden traer transparencia.
+  const datos = lienzo.toDataURL(blob.type === 'image/jpeg' ? 'image/jpeg' : 'image/png', .85);
+  ed.focus();
+  // El selector de archivos se lleva el foco y con él la selección: se repone
+  // la de antes de abrirlo, o el final de la nota si no había.
+  const sel = window.getSelection();
+  if (!rango) { rango = document.createRange(); rango.selectNodeContents(ed); rango.collapse(false); }
+  sel.removeAllRanges();
+  sel.addRange(rango);
+  document.execCommand('insertImage', false, datos);
+}
+
+// El tamaño se guarda como `width` en el <img> y los píxeles del data: no se
+// tocan: encoger y volver a agrandar es reversible. No se deja pasar del
+// tamaño natural, porque más allá solo se estiraría el mapa de bits.
+let marcoImagen = null;
+
+function anchoDisponibleImagen(img) {
+  const padre = img.parentElement, estilo = getComputedStyle(padre);
+  return padre.clientWidth - parseFloat(estilo.paddingLeft) - parseFloat(estilo.paddingRight);
+}
+
+function confirmarCambioImagen(img, estiloAnterior) {
+  if (img.getAttribute('style') === estiloAnterior) return;
+  const ed = img.closest('.editor-area');
+  const arriba = ed.scrollTop, izquierda = ed.scrollLeft;
+  const indice = [...ed.querySelectorAll('img')].indexOf(img);
+  const copia = img.cloneNode();
+  if (estiloAnterior === null) img.removeAttribute('style');
+  else img.setAttribute('style', estiloAnterior);
+  quitarMarcoImagen();
+  const rango = document.createRange();
+  rango.selectNode(img);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(rango);
+  ed.focus({ preventScroll: true });
+  // El arrastre solo previsualiza: sustituir la imagen al soltar registra
+  // una operación nativa, junto al texto, en vez de un historial paralelo.
+  document.execCommand('insertHTML', false, copia.outerHTML);
+  ed.scrollTop = arriba;
+  ed.scrollLeft = izquierda;
+  seleccionarImagen({ target: ed.querySelectorAll('img')[indice] });
+}
+
+function accionesImagen(img) {
+  const barra = document.createElement('div');
+  barra.className = 'img-acciones';
+  barra.setAttribute('role', 'toolbar');
+  barra.setAttribute('aria-label', tr('imagen.acciones'));
+  barra.addEventListener('pointerdown', (e) => e.preventDefault());
+  const acciones = [
+    ['original', () => { img.style.width = img.naturalWidth + 'px'; }],
+    ['ajustar', () => { img.style.width = Math.min(img.naturalWidth, anchoDisponibleImagen(img)) + 'px'; }],
+    ['izquierda', () => { img.style.marginLeft = '0'; img.style.marginRight = 'auto'; }],
+    ['centro', () => { img.style.marginLeft = img.style.marginRight = 'auto'; }],
+    ['derecha', () => { img.style.marginLeft = 'auto'; img.style.marginRight = '0'; }]
+  ];
+  const trazos = {
+    izquierda: 'M3 5h18M3 10h10M3 15h18M3 20h10',
+    centro: 'M3 5h18M7 10h10M3 15h18M7 20h10',
+    derecha: 'M3 5h18M11 10h10M3 15h18M11 20h10'
+  };
+  for (const [nombre, aplicar] of acciones) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.dataset.accion = nombre;
+    boton.title = tr('imagen.' + nombre);
+    boton.setAttribute('aria-label', boton.title);
+    if (trazos[nombre]) {
+      boton.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="${trazos[nombre]}"/></svg>`;
+      const alineacion = img.style.marginLeft === 'auto' ? (img.style.marginRight === 'auto' ? 'centro' : 'derecha') : 'izquierda';
+      boton.setAttribute('aria-pressed', nombre === alineacion ? 'true' : 'false');
+    } else boton.textContent = boton.title;
+    boton.addEventListener('click', () => {
+      const enfocado = document.activeElement === boton;
+      const anterior = img.getAttribute('style');
+      aplicar();
+      confirmarCambioImagen(img, anterior);
+      if (enfocado) $('.img-acciones [data-accion="' + nombre + '"]').focus({ preventScroll: true });
+    });
+    barra.appendChild(boton);
+  }
+  const ed = img.closest('.editor-area');
+  ed.parentElement.insertBefore(barra, ed);
+  return barra;
+}
+
+function quitarMarcoImagen() {
+  if (!marcoImagen) return;
+  marcoImagen.cancelarArrastre?.();
+  marcoImagen.observador.disconnect();
+  marcoImagen.capa.remove();
+  marcoImagen.barra.remove();
+  marcoImagen = null;
+}
+function seleccionarImagen(e) {
+  quitarMarcoImagen();
+  const img = e.target;
+  if (img.tagName !== 'IMG') return;
+  const host = $('#editor-host');
+  const ed = img.closest('.editor-area');
+  const capa = document.createElement('div');
+  capa.className = 'img-capa';
+  const marco = document.createElement('div');
+  marco.className = 'img-marco';
+  capa.appendChild(marco);
+  host.appendChild(capa);
+  const colocar = () => {
+    const r = img.getBoundingClientRect(), a = ed.getBoundingClientRect(), h = host.getBoundingClientRect();
+    Object.assign(capa.style, { left: a.left - h.left + 'px', top: a.top - h.top + 'px', width: ed.clientWidth + 'px', height: ed.clientHeight + 'px' });
+    Object.assign(marco.style, { left: r.left - a.left + 'px', top: r.top - a.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+  };
+  const observador = new ResizeObserver(colocar);
+  observador.observe(img);
+  observador.observe(ed);
+  const barra = accionesImagen(img);
+  marcoImagen = { img, capa, barra, colocar, observador };
+  colocar();
+  for (const [esquina, sx, sy] of [
+    ['sup-izq', -1, -1], ['sup-der', 1, -1],
+    ['inf-izq', -1, 1], ['inf-der', 1, 1]
+  ]) {
+    const asa = document.createElement('div');
+    asa.className = 'img-asa ' + esquina;
+    marco.appendChild(asa);
+    asa.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      asa.setPointerCapture(ev.pointerId);
+      const x0 = ev.clientX, y0 = ev.clientY;
+      const { width: w0, height: h0 } = img.getBoundingClientRect();
+      const estiloAnterior = img.getAttribute('style');
+      const max = Math.min(img.naturalWidth, anchoDisponibleImagen(img));
+      const limpiar = () => {
+        asa.onpointermove = asa.onpointerup = asa.onpointercancel = asa.onlostpointercapture = null;
+      };
+      marcoImagen.cancelarArrastre = () => {
+        limpiar();
+        if (estiloAnterior === null) img.removeAttribute('style');
+        else img.setAttribute('style', estiloAnterior);
+      };
+      asa.onpointermove = (m) => {
+        const dx = m.clientX - x0, dy = m.clientY - y0;
+        const cambio = Math.abs(dx) >= Math.abs(dy) ? sx * dx : sy * dy * w0 / h0;
+        img.style.width = Math.round(Math.min(max, Math.max(40, w0 + cambio))) + 'px';
+        colocar();
+      };
+      const terminar = () => {
+        limpiar();
+        marcoImagen.cancelarArrastre = null;
+        confirmarCambioImagen(img, estiloAnterior);
+      };
+      asa.onpointerup = asa.onpointercancel = asa.onlostpointercapture = terminar;
+    });
+  }
+}
+
+function rangoEnEditor() {
+  const sel = window.getSelection();
+  const ed = $('.editor-area');
+  return sel.rangeCount && ed?.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+}
+
+async function insertarImagenDeRuta(ruta, rango) {
+  try {
+    const bytes = await invoke('leer_imagen', { ruta });
+    const ext = rawExtOf(ruta);
+    const tipo = 'image/' + (ext === 'jpg' ? 'jpeg' : ext === 'svg' ? 'svg+xml' : ext);
+    await insertarImagen(new Blob([new Uint8Array(bytes)], { type: tipo }), rango);
+  } catch (e) {
+    toast(tr('notas.error.leerImagen', { motivo: e }));
+  }
+}
+
+async function elegirImagenes() {
+  const rango = rangoEnEditor();
+  let rutas;
+  try {
+    rutas = await elegirRuta('open', { multiple: true, filters: [{ name: tr('notas.imagenes'), extensions: EXT_IMAGEN }] });
+  } catch (e) { toast('Error diálogo: ' + e); return; }
+  // Solo la primera va a la selección guardada; las demás siguen al cursor.
+  for (const [i, ruta] of (rutas || []).entries()) await insertarImagenDeRuta(ruta, i ? rangoEnEditor() : rango);
+}
+
+function pegarImagen(e) {
+  const imagen = [...e.clipboardData.files].find(f => f.type.startsWith('image/'));
+  if (!imagen) return;
+  e.preventDefault();
+  insertarImagen(imagen, rangoEnEditor());
+}
+
+// Lista de tareas: una <ul class="tareas"> normal, con el círculo dibujado en
+// el margen de cada <li>. Así Intro, Tab y borrar se comportan como en
+// cualquier lista sin escribir nada de eso aquí.
+function insertarTareas() {
+  const ed = $('.editor-area.nota');
+  if (!ed) return;
+  ed.focus();
+  const lista = elementoDelCursor()?.closest('ul');
+  if (lista && ed.contains(lista)) lista.classList.toggle('tareas');
+  else {
+    document.execCommand('insertUnorderedList');
+    elementoDelCursor()?.closest('ul')?.classList.add('tareas');
+  }
+  onEditorInput();
+}
+
+function alternarTarea(e) {
+  // El círculo vive en los 30px de relleno izquierdo del <li>.
+  if (!e.target.matches('ul.tareas > li') || e.offsetX >= 30) return;
+  e.target.classList.toggle('hecha');
+  onEditorInput();
+}
+
 // ───────── BOOT ─────────
 (async function init() {
   await loadState();
@@ -2209,14 +2622,15 @@ function wireDragDrop() {
   wireToolbar();
   wireSettings();
   wireKeys();
-  wireSplitter();
-  wirePreviewBar();
+  wireVistaPrevia();
   wireStatusbar();
   wireSystemTheme();
   wireDragDrop();
   wireFileWatch();
+  wireNotas();
+  await cargarNotas();
   // Restore previous session if enabled
-  const restored = await restoreSession();
+  await restoreSession();
   // Open files passed on the command line ("Open With → bookos-notepad").
   // Pull model — race-free vs the old fire-once emit.
   let cliOpened = 0;
@@ -2233,10 +2647,10 @@ function wireDragDrop() {
       if (cliOpened) { renderTabs(); saveSessionDebounced(); }
     }
   } catch (e) { console.warn('take_cli_files failed:', e); }
-  if (!restored && !cliOpened && tabs.length === 0) newTab();
+  // Sin archivo pedido por línea de órdenes, la app abre en las notas; las
+  // pestañas de la sesión anterior quedan detrás, en la barra.
+  // Si la carpeta de notas falló y ya hay pestañas, no se añade otra vacía.
+  if (!cliOpened && (carpetaNotas || !tabs.length)) abrirNotaReciente();
   setZoom(state.settings.zoom);
-  applyPreviewLayout();
-  $('#preview-btn').classList.toggle('active', state.settings.previewOpen);
   showPage('editor');
-  if (state.settings.previewOpen) renderPreview();
 })();

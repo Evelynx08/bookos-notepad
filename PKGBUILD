@@ -23,8 +23,10 @@ package() {
 
   install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/bookos-notepad.desktop" <<EOF
 [Desktop Entry]
-Name=Bookos Notepad
-GenericName=Editor de texto
+Name=Notepad
+Name[es]=Notas
+GenericName=Text Editor
+GenericName[es]=Editor de texto
 Comment=Bloc de notas con pestañas, previsualización y adblock
 Exec=bookos-notepad %F
 Icon=bookos-notepad

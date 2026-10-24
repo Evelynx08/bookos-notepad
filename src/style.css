@@ -9,7 +9,7 @@ html,body{height:100%;overflow:hidden;background:transparent;outline:0}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 *:focus{outline:none}
 *:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:6px}
-.tab:focus-visible,.tool-btn:focus-visible,.tb-icon-btn:focus-visible,button:focus-visible{outline-offset:-2px}
+button:focus-visible{outline-offset:-2px}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Roboto,sans-serif;color:var(--tx);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;letter-spacing:-.01em;user-select:none;-webkit-user-select:none}
 
 /* #15 Scrollbar global custom */
@@ -20,55 +20,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Roboto,
 *{scrollbar-width:thin;scrollbar-color:var(--toff) transparent}
 
 .main-container{width:100%;height:100%;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
-.main-container.windowed{border-radius:18px;border:1px solid var(--brd)}
+.main-container.windowed{border-radius:20px;border:1px solid var(--brd)}
 .main-container.fullscreen-note{border-radius:0;border:0}
-.fullscreen-note .titlebar,.fullscreen-note .toolbar{position:fixed;left:0;right:0;background:var(--bg);z-index:20;transform:translateY(-100%);transition:transform .28s var(--ease)}
-.fullscreen-note .titlebar{top:0;height:42px;border-bottom:1px solid var(--div)}
-.fullscreen-note .toolbar{top:42px;border-bottom:1px solid var(--div)}
 .fullscreen-note.show-chrome .titlebar{transform:translateY(0)}
 .fullscreen-note.show-chrome .toolbar{transform:translateY(0)}
 .fullscreen-note .page-wrap{padding-top:0}
 .fs-hotzone{position:fixed;top:0;left:0;right:0;height:14px;z-index:19;background:transparent}
 
 /* Titlebar */
-.titlebar{height:42px;display:flex;align-items:center;padding:0 8px 0 12px;flex-shrink:0;gap:8px}
-.tb-left{display:flex;align-items:center;gap:6px;min-width:80px;height:100%;flex-shrink:0}
-.tb-title{font-size:12.5px;font-weight:600;color:var(--tx2);letter-spacing:.1px;opacity:.75;white-space:nowrap}
-.tb-center{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;gap:3px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;padding-top:6px}
-.tb-center::-webkit-scrollbar{display:none}
-.tb-right{display:flex;align-items:center;gap:1px;flex-shrink:0}
-.tb-icon-btn{background:0;border:0;color:var(--tx);cursor:pointer;opacity:.55;width:28px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;transition:opacity .15s var(--ease),background .15s var(--ease),color .15s var(--ease),transform .12s var(--ease);-webkit-app-region:no-drag;flex-shrink:0}
-.tb-icon-btn:hover{opacity:1;background:var(--hov)}
-.tb-icon-btn:active{transform:scale(.92)}
-.tb-icon-btn.active{opacity:1;background:var(--hov);color:var(--blue)}
-.controls{display:flex;gap:1px;margin-left:4px}
-.controls button{background:0;border:0;color:var(--tx);font-size:13px;cursor:pointer;opacity:.6;width:28px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;transition:opacity .15s var(--ease),background .15s var(--ease),color .15s var(--ease);-webkit-app-region:no-drag}
-.controls button:hover{opacity:1;background:var(--hov)}
-#close:hover{background:var(--red);color:#fff;opacity:1}
-@media(max-width:640px){.tb-title{display:none}.tb-left{min-width:0}}
 
-/* Tabs — #5 hide when only 1 */
-.tb-center.single-tab .tab{display:none}
-.tab{display:flex;align-items:center;gap:6px;background:var(--sbg);border:0;color:var(--tx);font-family:inherit;font-size:12px;font-weight:500;padding:6px 8px 6px 12px;border-radius:9px 9px 0 0;cursor:pointer;-webkit-app-region:no-drag;flex-shrink:0;max-width:180px;min-width:110px;height:30px;opacity:.7;transition:background .18s var(--ease),opacity .18s var(--ease),color .18s var(--ease);position:relative}
-.tab:hover{opacity:1;background:var(--hov)}
-/* #14 stronger contrast for active tab in light mode */
-.tab.active{background:var(--card);opacity:1;color:var(--tx);box-shadow:0 -2px 0 var(--blue) inset,0 -4px 8px rgba(0,0,0,.04)}
-.dark-mode .tab.active{box-shadow:0 -2px 0 var(--blue) inset}
-.tab .tab-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.tab .tab-dot{width:7px;height:7px;border-radius:50%;background:var(--orange);flex-shrink:0;opacity:0;transition:opacity .15s var(--ease)}
-.tab.dirty .tab-dot{opacity:1}
-.tab .tab-close{background:0;border:0;color:var(--tx2);cursor:pointer;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s var(--ease),background .15s var(--ease),color .15s var(--ease);flex-shrink:0;font-family:inherit;font-size:14px;line-height:1;padding:0}
-.tab.active .tab-close,.tab:hover .tab-close{opacity:.6}
-.tab .tab-close:hover{opacity:1!important;background:var(--hov);color:var(--red)}
-.tab.dirty .tab-close{display:none}
-.tab.dirty:hover .tab-close{display:flex}
 
-/* #2 Toolbar — better padding + gap + groups */
-.toolbar{display:flex;align-items:center;gap:4px;padding:6px 16px 8px;flex-shrink:0;flex-wrap:wrap;border-bottom:1px solid var(--div)}
 .tool-btn{background:0;border:0;color:var(--tx);cursor:pointer;height:30px;min-width:30px;padding:0 9px;border-radius:8px;font-family:inherit;font-size:13px;display:flex;align-items:center;justify-content:center;transition:opacity .15s var(--ease),background .15s var(--ease),color .15s var(--ease),transform .12s var(--ease);opacity:.75}
 .tool-btn:hover{opacity:1;background:var(--hov)}
 .tool-btn:active{transform:scale(.94)}
-.tool-btn.active{opacity:1;background:var(--blue);color:#fff;box-shadow:var(--sh-sm)}
 .tool-sep{width:1px;height:18px;background:var(--div);margin:0 6px;flex-shrink:0}
 .zoom-val{font-size:11.5px;color:var(--tx2);min-width:38px;text-align:center;font-variant-numeric:tabular-nums;font-weight:500}
 /* #7 Color pickers — distinct text vs bg */
@@ -92,17 +56,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Roboto,
 /* Split */
 .split{flex:1;min-height:0;display:flex;flex-direction:row;overflow:hidden;position:relative}
 .split-pane{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-/* #9 Splitter — wider hit area + clear visual indicator */
-.splitter{width:8px;flex-shrink:0;cursor:col-resize;background:transparent;position:relative;transition:background .2s var(--ease)}
-.splitter::before{content:"";position:absolute;inset:0;background:transparent;transition:background .2s var(--ease)}
-.splitter::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:3px;height:36px;border-radius:3px;background:var(--div);transition:background .2s var(--ease),height .2s var(--ease),width .2s var(--ease)}
-.splitter:hover::after,.splitter.drag::after{background:var(--blue);height:60px;width:4px}
-.splitter:hover::before,.splitter.drag::before{background:color-mix(in srgb,var(--blue) 6%,transparent)}
-.preview-pane.hidden{display:none}
-.preview-pane{flex:1;padding:14px 18px 0 0;min-width:280px}
 
-/* #8 Preview bar — centered pills, balanced spacing */
-.preview-bar{display:flex;align-items:center;gap:6px;padding:0 4px 10px 0;flex-shrink:0;flex-wrap:nowrap}
 .preview-mode-pills{display:inline-flex;background:var(--sbg);border-radius:10px;padding:3px;gap:1px;flex-shrink:0}
 .pill{background:0;border:0;color:var(--tx);font-size:11px;font-weight:500;padding:5px 10px;border-radius:7px;cursor:pointer;font-family:inherit;transition:opacity .18s var(--ease),background .18s var(--ease),color .18s var(--ease);opacity:.7}
 .pill:hover{opacity:1;background:var(--hov)}
@@ -313,3 +267,159 @@ body.dropping::after{content:"";position:fixed;inset:0;border:3px dashed var(--b
 :root.dark-mode ::highlight(find-match){background-color:rgba(255,214,10,.4)}
 mark.find-hl{background-color:rgba(255,204,0,.45);color:inherit;border-radius:2px}
 :root.dark-mode mark.find-hl{background-color:rgba(255,214,10,.4);color:inherit}
+
+/* ═════ Estructura: la del explorador de BookOS (explorer/src/style.css) ═════
+   Barra lateral en tarjeta, cabecera con el título y botones-píldora, pestañas
+   en una barra segmentada. Las medidas son las suyas para que las dos apps se
+   lean como la misma familia. */
+:root{--onaccent:var(--on-accent,#fff);--corta:.12s cubic-bezier(.4,0,.2,1)}
+[hidden]{display:none!important}
+button{font-family:inherit;color:inherit;background:0;border:0;cursor:pointer}
+
+.titlebar{height:36px;display:flex;align-items:center;justify-content:flex-end;padding:0 8px 0 16px;flex-shrink:0}
+.controls{display:flex;gap:4px;-webkit-app-region:no-drag}
+.controls button{width:30px;height:26px;border-radius:6px;background:var(--sbg);opacity:.7;display:flex;align-items:center;justify-content:center;transition:background var(--corta),opacity var(--corta),color var(--corta)}
+.controls button:hover{opacity:1;background:var(--act)}
+#close:hover{background:var(--red);color:#fff}
+
+.cuerpo{flex:1;min-height:0;display:flex;gap:12px;padding:0 12px 12px}
+.principal{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* 264px: los 216 del explorador se quedan cortos para título + fecha + extracto */
+.lista{width:264px;flex-shrink:0;display:flex;flex-direction:column;background:var(--card);border-radius:22px;padding:10px 8px 0;box-shadow:var(--sh-sm)}
+.dark-mode .lista,.dark-mode .boton,.dark-mode .tabs,.dark-mode .formato{box-shadow:none}
+.sin-lista .lista,.fullscreen-note .lista{display:none}
+.lista-buscar{display:flex;align-items:center;gap:8px;height:36px;margin:0 4px;padding:0 12px;background:var(--sbg);border-radius:12px;color:var(--tx2);flex-shrink:0}
+.lista-buscar:focus-within{box-shadow:0 0 0 2px var(--blue) inset}
+.lista-buscar svg{flex-shrink:0}
+.lista-buscar input{flex:1;min-width:0;background:0;border:0;color:var(--tx);font-family:inherit;font-size:13px;user-select:text;-webkit-user-select:text}
+.lista-buscar input::placeholder{color:var(--tx2)}
+.lista-notas{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;padding-bottom:10px}
+.lista-notas::-webkit-scrollbar{display:none}
+.grupo-cab{font-size:12px;font-weight:500;color:var(--tx2);padding:16px 12px 6px}
+.nota-item{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;margin-bottom:2px;padding:8px 12px;border-radius:14px;text-align:left;transition:background var(--corta)}
+.nota-item:hover{background:var(--hov)}
+.nota-item.sel{background:color-mix(in srgb,var(--blue) 10%,transparent)}
+.nota-textos{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nota-nombre,.nota-extracto{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nota-nombre{font-size:14px;font-weight:500}
+.nota-item.sel .nota-nombre{font-weight:600}
+.nota-extracto{font-size:11.5px;color:var(--tx2)}
+.nota-cuando{color:var(--tx);margin-right:6px;font-variant-numeric:tabular-nums}
+.nota-mini{width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0}
+.lista-aviso{font-size:13px;color:var(--tx2);text-align:center;line-height:1.5;padding:28px 12px;overflow-wrap:anywhere}
+.lista-aviso button{display:block;margin:12px auto 0;background:var(--hov);font-size:13px;font-weight:600;padding:8px 18px;border-radius:12px}
+
+.cabecera{height:56px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.cab-nombre{flex:1;min-width:0;display:flex;align-items:baseline;gap:10px}
+.cab-titulo{font-size:22px;font-weight:700;letter-spacing:-.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cab-cuenta{font-size:12px;color:var(--tx2);white-space:nowrap}
+.cab-acciones{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.boton{height:38px;border-radius:14px;background:var(--card);display:flex;align-items:center;gap:6px;padding:0 12px;font-size:13px;font-weight:600;flex-shrink:0;box-shadow:var(--sh-sm);transition:background var(--corta),color var(--corta),transform var(--corta)}
+.boton:hover{background:color-mix(in srgb,var(--card) 88%,var(--tx) 12%)}
+.boton:active{transform:scale(.96)}
+.boton.redondo{width:38px;padding:0;justify-content:center}
+.boton svg{width:18px;height:18px}
+.boton.primario,.boton.active{background:var(--blue);color:var(--onaccent)}
+.boton.primario:hover,.boton.active:hover{background:color-mix(in srgb,var(--blue) 88%,var(--onaccent) 12%)}
+
+.tabs{display:flex;gap:2px;background:var(--card);border-radius:14px;padding:3px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none;flex-shrink:0;box-shadow:var(--sh-sm)}
+.tabs::-webkit-scrollbar{display:none}
+.tabs:empty,.fullscreen-note .tabs,.fullscreen-note .cabecera{display:none}
+/* Ancho tope y no reparto a partes iguales como en el explorador: aquí puede
+   haber una sola pestaña, y ocupando toda la barra parecía un botón enorme */
+.tab{flex:0 1 200px;min-width:0;height:28px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 10px;font-size:13px;font-weight:500;cursor:pointer;transition:background var(--corta),color var(--corta)}
+.tab:hover:not(.active){background:var(--hov)}
+.tab.active{background:var(--blue);color:var(--onaccent);font-weight:600}
+.tab .tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab .tab-dot{width:7px;height:7px;border-radius:50%;background:var(--orange);flex-shrink:0;display:none}
+.tab.dirty .tab-dot{display:block}
+.tab .tab-close{width:16px;height:16px;border-radius:6px;flex-shrink:0;opacity:0;display:flex;align-items:center;justify-content:center;margin-right:-4px;transition:opacity var(--corta),background var(--corta)}
+.tab .tab-close svg{width:14px;height:14px}
+.tab:hover .tab-close,.tab.active .tab-close{opacity:.6}
+.tab .tab-close:hover{opacity:1;background:var(--act)}
+
+.toolbar{display:flex;align-items:center;gap:8px;padding-bottom:10px;flex-shrink:0}
+.formato{display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-height:38px;padding:4px;background:var(--card);border-radius:14px;box-shadow:var(--sh-sm)}
+.formato .tool-btn{border-radius:10px}
+.tool-btn.active{opacity:1;background:var(--blue);color:var(--onaccent)}
+#borrar-nota{margin-left:auto}
+.fullscreen-note .cuerpo{padding:0}
+.fullscreen-note .titlebar,.fullscreen-note .toolbar{position:fixed;left:0;right:0;background:var(--bg);z-index:20;transform:translateY(-100%);transition:transform .28s var(--ease)}
+.fullscreen-note .titlebar{top:0}
+.fullscreen-note .toolbar{top:36px;padding:0 12px 10px;border-bottom:1px solid var(--div)}
+
+/* ───── Modos: nota / archivo / ajustes ───── */
+/* El zoom sale de la barra en las notas: sigue en Ctrl+rueda y Ctrl+± */
+.modo-nota .solo-archivo,.main-container:not(.modo-nota) .solo-nota,.en-ajustes .solo-nota,.en-ajustes .solo-archivo{display:none}
+.editor-wrap{padding:0}
+.statusbar{padding:8px 8px 0}
+.page-settings{padding:0}
+
+/* ───── La nota: se escribe sobre el fondo, como el contenido del explorador ───── */
+.modo-nota .editor-host{border-radius:22px}
+.dark-mode .modo-nota .editor-host{box-shadow:none}
+.nota-cabecera{flex-shrink:0;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px 12px;padding:14px 26px 0}
+.nota-fecha{font-size:12px;color:var(--tx2);font-variant-numeric:tabular-nums}
+.nota-guardado{background:none;border:0;color:var(--tx2);font:inherit;font-size:11px;padding:2px 0}
+.nota-guardado.error{color:var(--red);cursor:pointer;text-decoration:underline}
+.editor-area.nota{padding:12px 26px 40px;position:relative}
+/* 22/15 en em para que el título siga al zoom */
+.editor-area.nota>:first-child,.editor-area.nota.vacia::before{font-size:1.4667em;font-weight:700;letter-spacing:-.3px;line-height:1.3;padding-bottom:4px}
+/* Fuera del flujo: dentro del <div> del título el cursor quedaría detrás del texto de ayuda */
+.editor-area.nota.vacia::before{content:attr(data-placeholder);position:absolute;top:12px;left:26px;color:var(--tx2);opacity:.45;pointer-events:none}
+/* En cualquier editor, no solo en notas: sin tope una imagen entra a su tamaño
+   real y desborda la ventana */
+.editor-area img{cursor:pointer;display:block;max-width:100%;height:auto;border-radius:14px;margin:8px 0}
+.img-capa{position:absolute;overflow:hidden;pointer-events:none;z-index:5}
+.img-marco{position:absolute;border:2px solid var(--blue);border-radius:14px;pointer-events:none}
+.img-asa{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--blue);border:2px solid var(--card);pointer-events:auto;touch-action:none}
+.img-asa.sup-izq{left:-8px;top:-8px;cursor:nwse-resize}
+.img-asa.sup-der{right:-8px;top:-8px;cursor:nesw-resize}
+.img-asa.inf-izq{left:-8px;bottom:-8px;cursor:nesw-resize}
+.img-asa.inf-der{right:-8px;bottom:-8px;cursor:nwse-resize}
+.img-acciones{flex-shrink:0;align-self:flex-end;max-width:calc(100% - 24px);display:flex;flex-wrap:wrap;gap:4px;margin:8px 12px 0;padding:5px;border:1px solid var(--brd);border-radius:12px;background:var(--card);box-shadow:var(--sh-sm)}
+.img-acciones button{display:flex;align-items:center;justify-content:center;min-height:30px;padding:5px 8px;border-radius:8px;background:none;color:var(--tx);font:inherit;font-size:12px;cursor:pointer}
+.img-acciones button:hover{background:var(--hov)}
+.img-acciones button[aria-pressed=true]{background:var(--blue);color:var(--onaccent,#fff)}
+.img-acciones svg{width:18px;height:18px}
+/* El reset global deja las listas sin sangría y las viñetas caían fuera */
+.editor-area.nota ul,.editor-area.nota ol{padding-left:24px}
+.editor-area.nota ul.tareas{list-style:none;padding-left:0}
+.editor-area.nota ul.tareas>li{position:relative;padding-left:30px}
+.editor-area.nota ul.tareas>li::before{content:"";position:absolute;left:0;top:.2em;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--tx2);cursor:pointer}
+.editor-area.nota ul.tareas>li.hecha{color:var(--tx2);text-decoration:line-through}
+.editor-area.nota ul.tareas>li.hecha::before{background:var(--blue);border-color:var(--blue)}
+/* El visto es una máscara y no un «✓» de texto: sigue a --onaccent en cualquier paleta */
+.editor-area.nota ul.tareas>li.hecha::after{content:"";position:absolute;left:0;top:.2em;width:18px;height:18px;pointer-events:none;background:var(--onaccent);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/12px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/12px no-repeat}
+
+/* Diálogo de confirmación */
+.dialogo{position:fixed;inset:0;z-index:110;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:20px}
+.dialogo-caja{width:310px;background:var(--card);border-radius:26px;padding:28px 24px 20px;box-shadow:0 20px 56px rgba(0,0,0,.3);animation:dialogoPop .25s cubic-bezier(.34,1.4,.64,1)}
+@keyframes dialogoPop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+.dialogo-titulo{font-size:17px;font-weight:700;text-align:center;line-height:1.3}
+.dialogo-texto{font-size:13px;color:var(--tx2);text-align:center;line-height:1.5;margin-top:8px;overflow-wrap:anywhere}
+.dialogo-botones{display:flex;gap:10px;margin-top:22px}
+.dialogo-btn{flex:1;height:48px;border-radius:14px;background:var(--hov);font-size:15px;font-weight:600}
+.dialogo-btn.peligro{background:var(--red);color:#fff}
+
+/* ───── Ventana de vista previa (preview.html) ───── */
+.vp-barra{height:46px;display:flex;align-items:center;gap:6px;padding:0 8px 0 10px;flex-shrink:0;position:relative}
+/* Centrado en la barra entera, no entre los botones (§11.2) */
+.vp-titulo{position:absolute;left:190px;right:190px;text-align:center;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
+.vp-hueco{flex:1;align-self:stretch}
+.vp-url{display:flex;align-items:center;gap:6px;padding:0 10px 8px;flex-shrink:0}
+.vp .preview-body{margin:0 10px 10px;box-shadow:none}
+
+/* Por debajo de 900px la lista se esconde: con 264px de lista y 12 de hueco
+   el título «Notas» quedaba aplastado y la barra de formato se partía en dos filas */
+@media(max-width:900px){
+  .lista{display:none}
+  .sin-lista .lista{display:none}
+  .cab-cuenta,#lista-btn{display:none}
+  .cab-titulo{min-width:0}
+  .formato{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0}
+  .formato::-webkit-scrollbar{display:none}
+  .toolbar{min-width:0}
+  .toolbar .formato{flex:1}
+}
