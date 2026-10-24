@@ -7,8 +7,6 @@ const $ = (s, r=document) => r.querySelector(s);
 
 let doc = null;       // { nombre, ext, texto, ajustes } — lo último recibido
 let ajustes = {};
-let previewToken = 0; // increments each render — async callbacks check before mount
-let _adblockBlockedCount = 0;
 
 function ajustar(clave, valor) {
   ajustes[clave] = valor;
@@ -98,7 +96,6 @@ function mountUrlIframe(body, final) {
   f.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen';
   f.setAttribute('allowfullscreen', '');
   body.appendChild(f);
-  updateShieldBadge(true, final);
   // For YouTube embeds, add a floating action bar with PiP/external player options
   if (/youtube(-nocookie)?\.com\/embed\//.test(final) || /youtube\.com\/watch/.test(final) || /youtu\.be/.test(final)) {
     addYtActionBar(body, ajustes.previewUrl || final);
@@ -127,46 +124,6 @@ async function openExternal(url) {
   }
 }
 
-function showAdblockBlocked(body, url, rule) {
-  const d = document.createElement('div');
-  d.className = 'preview-empty';
-  d.innerHTML = `
-    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>
-    <div style="font-weight:600;color:var(--red);font-size:14px">URL bloqueada por filtro</div>
-    <div style="opacity:.8;font-size:11.5px;max-width:340px;word-break:break-all;line-height:1.5">${escapeHtml(url)}</div>
-    <div style="opacity:.5;font-size:11px;font-family:'JetBrains Mono',monospace;max-width:340px;word-break:break-all">${escapeHtml(rule || 'regla desconocida')}</div>
-    <button class="tool-btn" id="adblock-bypass" style="margin-top:8px;background:var(--sbg);padding:6px 14px;opacity:1">Cargar igualmente</button>`;
-  body.appendChild(d);
-  const btn = d.querySelector('#adblock-bypass');
-  if (btn) btn.addEventListener('click', () => {
-    body.innerHTML = '';
-    mountUrlIframe(body, url);
-  });
-  updateShieldBadge(false, url);
-}
-
-function updateShieldBadge(ok, url) {
-  const sh = $('#shield-badge');
-  if (!sh) return;
-  const SHIELD_OK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>`;
-  const SHIELD_BLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z"/></svg>`;
-  const SHIELD_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3"><path d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>`;
-  if (!ok && ajustes.adblockEnabled) _adblockBlockedCount++;
-  const countBadge = _adblockBlockedCount > 0
-    ? `<span class="shield-count">${_adblockBlockedCount > 99 ? '99+' : _adblockBlockedCount}</span>`
-    : '';
-  if (!ajustes.adblockEnabled) {
-    sh.innerHTML = SHIELD_OFF;
-    sh.title = 'Adblock desactivado';
-    sh.className = 'tool-btn shield-badge off';
-    return;
-  }
-  sh.innerHTML = (ok ? SHIELD_OK : SHIELD_BLOCK) + countBadge;
-  sh.title = (ok ? 'Adblock activo · permitido' : 'Adblock bloqueó: ' + url)
-    + (_adblockBlockedCount > 0 ? ` · ${_adblockBlockedCount} bloqueos esta sesión` : '');
-  sh.className = 'tool-btn shield-badge ' + (ok ? 'on' : 'block');
-}
-
 function showPreviewEmpty(body, msg) {
   const d = document.createElement('div');
   d.className = 'preview-empty';
@@ -182,7 +139,6 @@ function setActivePill(mode) {
 
 function renderPreview() {
   const body = $('#preview-body');
-  const myToken = ++previewToken;
   // Al reescribir mientras se edita, el Markdown no vuelve arriba del todo.
   const desplazado = body.querySelector('.preview-md')?.scrollTop || 0;
   body.innerHTML = '';
@@ -196,24 +152,7 @@ function renderPreview() {
     if (!url) { showPreviewEmpty(body, 'Pega una URL arriba. YouTube se embebe automáticamente.'); return; }
     const yt = youtubeEmbed(url);
     const final = yt || normalizeUrl(url);
-    // Adblock pre-check
-    if (ajustes.adblockEnabled) {
-      invoke('adblock_check', { url: final, sourceUrl: 'about:blank' }).then(res => {
-        if (myToken !== previewToken) return; // stale render — bail
-        body.innerHTML = '';
-        if (res && res.blocked) {
-          showAdblockBlocked(body, final, res.rule || '');
-        } else {
-          mountUrlIframe(body, final);
-        }
-      }).catch(() => {
-        if (myToken !== previewToken) return;
-        body.innerHTML = '';
-        mountUrlIframe(body, final);
-      });
-    } else {
-      mountUrlIframe(body, final);
-    }
+    mountUrlIframe(body, final);
     return;
   }
 
@@ -305,12 +244,6 @@ function wire() {
   // manda a cada pulsación.
   $('#preview-refresh').addEventListener('click', () => invoke('vista_previa_pedir'));
   $('#close').addEventListener('click', () => invoke('vista_previa_cerrar'));
-  $('#shield-badge').addEventListener('click', () => {
-    ajustar('adblockEnabled', !ajustes.adblockEnabled);
-    invoke('adblock_set_enabled', { enabled: ajustes.adblockEnabled }).catch(()=>{});
-    toast('Adblock: ' + (ajustes.adblockEnabled ? 'ON' : 'OFF'));
-    renderPreview();
-  });
   // Como Quick Look: Escape o Espacio la cierran, salvo escribiendo la URL.
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' || (e.key === ' ' && e.target !== inp)) {

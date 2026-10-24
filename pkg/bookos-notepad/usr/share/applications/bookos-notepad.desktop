@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Bookos Notepad
 GenericName=Editor de texto
-Comment=Bloc de notas con pestañas, previsualización y adblock
+Comment=Bloc de notas con pestañas, previsualización
 Exec=bookos-notepad %F
 Icon=bookos-notepad
 Type=Application

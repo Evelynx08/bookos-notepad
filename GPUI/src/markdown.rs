@@ -74,13 +74,17 @@ pub fn parsear(texto: &str) -> Vec<Bloque> {
         } else if t.starts_with('>') {
             let mut dentro = Vec::new();
             while i < lineas.len() && lineas[i].trim_start().starts_with('>') {
-                let s = lineas[i].trim_start()[1..].strip_prefix(' ').unwrap_or(&lineas[i].trim_start()[1..]);
+                let s = lineas[i].trim_start()[1..]
+                    .strip_prefix(' ')
+                    .unwrap_or(&lineas[i].trim_start()[1..]);
                 dentro.push(s);
                 i += 1;
             }
             bloques.push(Bloque::Cita(parsear(&dentro.join("\n"))));
         } else if t.starts_with('|')
-            && lineas.get(i + 1).is_some_and(|s| es_separador_tabla(s.trim()))
+            && lineas
+                .get(i + 1)
+                .is_some_and(|s| es_separador_tabla(s.trim()))
         {
             let cabecera = celdas(t);
             i += 2;
@@ -167,16 +171,11 @@ fn titulo(t: &str) -> Option<(u8, &str)> {
 
 fn es_regla(t: &str) -> bool {
     let sin: String = t.chars().filter(|c| !c.is_whitespace()).collect();
-    sin.len() >= 3
-        && ['-', '*', '_']
-            .iter()
-            .any(|&c| sin.chars().all(|x| x == c))
+    sin.len() >= 3 && ['-', '*', '_'].iter().any(|&c| sin.chars().all(|x| x == c))
 }
 
 fn es_separador_tabla(t: &str) -> bool {
-    t.starts_with('|')
-        && t.contains('-')
-        && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
+    t.starts_with('|') && t.contains('-') && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
 }
 
 fn celdas(fila: &str) -> Vec<Linea> {
@@ -243,7 +242,10 @@ pub fn en_linea(fuente: &str) -> Linea {
                 continue;
             }
         }
-        if let Some(r) = resto.strip_prefix("**").or_else(|| resto.strip_prefix("__")) {
+        if let Some(r) = resto
+            .strip_prefix("**")
+            .or_else(|| resto.strip_prefix("__"))
+        {
             alternar(Marca::Negrita, &texto, &mut marcas);
             resto = r;
             continue;
@@ -377,7 +379,9 @@ impl Estilo {
                     .mb(self.p(abajo))
                     .text_size(self.p(tam))
                     .line_height(self.p(tam * 1.3))
-                    .when(*nivel == 2, |d| d.pb(self.p(4.)).border_b_1().border_color(tm.div))
+                    .when(*nivel == 2, |d| {
+                        d.pb(self.p(4.)).border_b_1().border_color(tm.div)
+                    })
                     .child(self.texto(linea, peso, tm.tx))
                     .into_any_element()
             }
@@ -394,13 +398,15 @@ impl Estilo {
                 .rounded_r(self.p(8.))
                 .bg(tm.sbg)
                 .text_color(tm.tx2)
-                .children(dentro.iter().map(|b| match b {
-                    // Dentro de la cita el texto va en `--tx2`, como en el CSS.
-                    Bloque::Parrafo(l) => div()
-                        .my(self.p(3.))
-                        .child(self.texto(l, FontWeight::NORMAL, tm.tx2))
-                        .into_any_element(),
-                    otro => self.bloque(otro, false),
+                .children(dentro.iter().map(|b| {
+                    match b {
+                        // Dentro de la cita el texto va en `--tx2`, como en el CSS.
+                        Bloque::Parrafo(l) => div()
+                            .my(self.p(3.))
+                            .child(self.texto(l, FontWeight::NORMAL, tm.tx2))
+                            .into_any_element(),
+                        otro => self.bloque(otro, false),
+                    }
                 }))
                 .into_any_element(),
             Bloque::Lista(items) => div()
@@ -419,12 +425,11 @@ impl Estilo {
                                 .text_color(tm.tx2)
                                 .child(marcador.clone()),
                         )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w(self.p(0.))
-                                .child(self.texto(linea, FontWeight::NORMAL, tm.tx)),
-                        )
+                        .child(div().flex_1().min_w(self.p(0.)).child(self.texto(
+                            linea,
+                            FontWeight::NORMAL,
+                            tm.tx,
+                        )))
                 }))
                 .into_any_element(),
             Bloque::Codigo(codigo) => div()
@@ -522,7 +527,9 @@ mod tests {
         assert_eq!(b[2], Bloque::Regla);
         assert!(matches!(&b[3], Bloque::Lista(i) if i.len() == 2 && i[1].1 == "2."));
         assert!(matches!(&b[4], Bloque::Lista(i) if i[1].0 == 1));
-        assert!(matches!(&b[5], Bloque::Tabla { cabecera, filas } if cabecera.len() == 2 && filas.len() == 1));
+        assert!(
+            matches!(&b[5], Bloque::Tabla { cabecera, filas } if cabecera.len() == 2 && filas.len() == 1)
+        );
         assert_eq!(b[6], Bloque::Codigo("fn main() {}".into()));
         assert!(matches!(&b[7], Bloque::Parrafo(l) if l.texto == "párrafo\nsegunda"));
     }

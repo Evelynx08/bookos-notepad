@@ -105,7 +105,6 @@ const DEFAULT_SETTINGS = {
   zoom: 100,           // percent
   previewMode: 'auto', // auto|html|md|url
   previewUrl: '',
-  adblockEnabled: true,
   youtubeNoCookie: true,
   youtubeDirect: false,     // try youtube.com/watch directly (skip /embed/)
   shortcuts: {},            // user overrides: { actionId: "Ctrl+Alt+B" }
@@ -565,14 +564,14 @@ async function enviarVistaPrevia() {
   const t = activeTab();
   if (!vistaAbierta || !t || t.nota) return;
   const ed = $('.editor-area');
-  const { previewMode, previewUrl, adblockEnabled, youtubeNoCookie, youtubeDirect } = state.settings;
+  const { previewMode, previewUrl, youtubeNoCookie, youtubeDirect } = state.settings;
   try {
     await invoke('vista_previa', { doc: {
       nombre: t.name,
       ext: t.ext,
       // Un .html se edita como marcado real; el resto, como texto.
       texto: t.rich ? ed.innerHTML : htmlToPlain(ed.innerHTML),
-      ajustes: { previewMode, previewUrl, adblockEnabled, youtubeNoCookie, youtubeDirect },
+      ajustes: { previewMode, previewUrl, youtubeNoCookie, youtubeDirect },
     } });
   } catch (e) {
     vistaCerrada();
@@ -613,8 +612,6 @@ function wireVistaPrevia() {
     saveState();
     renderSettings();
   });
-  // Sync Rust side with persisted state
-  invoke('adblock_set_enabled', { enabled: !!state.settings.adblockEnabled }).catch(()=>{});
 }
 
 // Code-like extensions that get auto-close brackets/tags
@@ -1118,7 +1115,6 @@ function renderSettings() {
   setToggle('tg-fileaccent', state.settings.fileAccent);
   setToggle('tg-restore', state.settings.restoreSession);
   setToggle('tg-autosave', state.settings.autoSave);
-  setToggle('tg-adblock', state.settings.adblockEnabled);
   setToggle('tg-yt-nocookie', state.settings.youtubeNoCookie);
   setToggle('tg-yt-direct', state.settings.youtubeDirect);
 }
@@ -1172,10 +1168,6 @@ function wireSettings() {
       if (window.BookosI18n) BookosI18n.setLang(langSel.value);
     });
   }
-  wireToggle('tg-adblock', 'adblockEnabled', () => {
-    invoke('adblock_set_enabled', { enabled: state.settings.adblockEnabled }).catch(()=>{});
-    enviarVistaPrevia();
-  });
   wireToggle('tg-yt-nocookie', 'youtubeNoCookie', () => {
     enviarVistaPrevia();
   });

@@ -1,7 +1,7 @@
 pkgname=bookos-notepad
 pkgver=0.6.1
 pkgrel=1
-pkgdesc="Bloc de notas con pestañas, preview HTML/Markdown/URL y adblock para BookOS"
+pkgdesc="Bloc de notas con pestañas, preview HTML/Markdown/URL para BookOS"
 arch=('x86_64')
 url="https://github.com/Evelynx08/bookos-notepad"
 license=('MIT')
@@ -27,7 +27,7 @@ Name=Notepad
 Name[es]=Notas
 GenericName=Text Editor
 GenericName[es]=Editor de texto
-Comment=Bloc de notas con pestañas, previsualización y adblock
+Comment=Bloc de notas con pestañas, previsualización
 Exec=bookos-notepad %F
 Icon=bookos-notepad
 Type=Application

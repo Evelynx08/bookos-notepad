@@ -1,7 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod adblock_engine;
-
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -629,8 +627,7 @@ fn main() {
     if std::env::var_os("GTK_THEME").is_none() {
         std::env::set_var("GTK_THEME", "catppuccin-bookos-dark-blue-standard+default");
     }
-    adblock_engine::init();
-    tauri::Builder::default()
+    let resultado = tauri::Builder::default()
         .on_page_load(desactivar_zoom_por_pellizco)
         // Single instance MUST be registered first. A second launch (e.g. a new
         // "Open With") routes its files into the already-running window as tabs
@@ -676,11 +673,7 @@ fn main() {
             check_player_available,
             open_bookos_updates,
             app_version_info,
-            take_cli_files,
-            adblock_engine::adblock_check,
-            adblock_engine::adblock_cosmetic,
-            adblock_engine::adblock_set_enabled,
-            adblock_engine::adblock_get_enabled
+            take_cli_files
         ])
         .setup(|app| {
             use tauri::{WebviewWindowBuilder, WebviewUrl};
@@ -711,11 +704,14 @@ fn main() {
                     }
                 }
             });
-            let _ = win.show();
+            win.show()?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running app");
+        .run(tauri::generate_context!());
+    if let Err(error) = resultado {
+        eprintln!("bookos-notepad: no se pudo iniciar la interfaz: {error}");
+        std::process::exit(1);
+    }
 }
 
 // ── Color dinámico ───────────────────────────────────────────────────────
