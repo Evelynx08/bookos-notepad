@@ -4,7 +4,7 @@ Name:           bookos-notepad
 Version:        0.7.0
 Release:        1%{?dist}
 Summary:        Bloc de notas nativo de BookOS
-License:        GPL-3.0-or-later
+License:        LicenseRef-BookOS
 Requires:       vulkan-loader
 Requires:       xdg-utils
 Requires:       bookos-explorer

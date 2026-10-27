@@ -3,8 +3,8 @@ pkgver=0.6.1
 pkgrel=1
 pkgdesc="Bloc de notas con pestañas, preview HTML/Markdown/URL para BookOS"
 arch=('x86_64')
-url="https://github.com/Evelynx08/bookos-notepad"
-license=('MIT')
+url="https://github.com/bookos-os/bookos-notepad"
+license=('LicenseRef-BookOS')
 depends=('webkit2gtk-4.1' 'gtk3' 'libsoup3' 'librsvg' 'openssl' 'ca-certificates' 'xdg-utils')
 optdepends=('mpv: reproducción flotante de vídeos YouTube'
             'yt-dlp: requerido por mpv para reproducir YouTube')
